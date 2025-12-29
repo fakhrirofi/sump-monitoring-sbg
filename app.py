@@ -200,37 +200,49 @@ with tab_admin:
         
         st.divider()
         
-        # Section 2: Developer Tools (Dummy Data)
-        st.markdown("#### 🧪 Developer Tools (Dummy Data)")
-        st.info("Tools ini digunakan untuk mengisi database dengan data dummy agar fitur grafik bisa diuji.")
+        # Section 2: Developer Tools
+        st.markdown("#### 🧪 Developer Tools")
         
         c_dev1, c_dev2 = st.columns(2)
         
         with c_dev1:
+            st.info("Gunakan ini untuk mengisi data grafik.")
             if st.button("Generate Dummy Data", type="primary", use_container_width=True):
-                with st.spinner("Generating 30 days of data..."):
-                    db.generate_dummy_data()
-                    # Reload Data
-                    df_s, df_p = db.load_data()
-                    st.session_state['data_sump'] = df_s
-                    st.session_state['data_pompa'] = df_p
-                    # Force map rebuild
-                    st.session_state.pop('site_map', None) 
-                st.success("Dummy data 'dummy_Site_Demo' has been created.")
-                st.rerun()
+                try:
+                    with st.spinner("Generating data..."):
+                        db.generate_dummy_data()
+                        # Reload Data
+                        df_s, df_p = db.load_data()
+                        st.session_state['data_sump'] = df_s
+                        st.session_state['data_pompa'] = df_p
+                        st.session_state.pop('site_map', None) 
+                    st.success("Dummy data generated!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                    st.error("Tip: Try 'Reset Database' below if this fails.")
                 
         with c_dev2:
+            st.info("Hapus hanya data dummy.")
             if st.button("Delete Dummy Data", type="secondary", use_container_width=True):
                 with st.spinner("Cleaning up..."):
                     db.delete_dummy_data()
-                    # Reload Data
                     df_s, df_p = db.load_data()
                     st.session_state['data_sump'] = df_s
                     st.session_state['data_pompa'] = df_p
                     st.session_state.pop('site_map', None) 
-                st.warning("All data prefixed with 'dummy_' has been deleted.")
+                st.warning("Dummy data deleted.")
                 st.rerun()
 
+        st.divider()
+        st.markdown("#### ⚠️ Danger Zone")
+        with st.expander("Reset Database (Fix Schema Errors)"):
+            st.warning("This will DELETE ALL DATA (Real & Dummy) and recreate empty tables. Use this if you get 'ProgrammingError' or 'Column missing' errors.")
+            if st.button("🔴 RESET DATABASE (DROP TABLES)", type="primary"):
+                with st.spinner("Resetting Database..."):
+                    db.reset_db()
+                    st.session_state.clear() # Clear session to force full reload
+                st.success("Database has been reset. Please refresh the page.")
+                
     else:
         ui.render_login_form("adm")
-        
