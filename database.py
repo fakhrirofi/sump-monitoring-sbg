@@ -27,7 +27,7 @@ def init_db():
         session.commit()
 
 def reset_db():
-    """DROPS and recreates tables. Use this to fix schema mismatches."""
+    """DROPS and recreates tables."""
     conn = get_connection()
     with conn.session as session:
         session.execute(text("DROP TABLE IF EXISTS sump"))
@@ -46,13 +46,10 @@ def load_data():
     except Exception:
         df_s = pd.DataFrame()
 
-    # Ensure columns are lowercase (Postgres standard)
     df_s.columns = map(str.lower, df_s.columns)
-    
     if not df_s.empty:
         df_s['tanggal'] = pd.to_datetime(df_s['tanggal'])
     
-    # Apply Standard Naming
     df_s = df_s.rename(columns={
         "elevasi_air": "Elevasi Air (m)", "critical_elevation": "Critical Elevation (m)",
         "volume_air_survey": "Volume Air Survey (m3)", "plan_curah_hujan": "Plan Curah Hujan (mm)",
@@ -60,14 +57,11 @@ def load_data():
         "groundwater": "Groundwater (m3)", "tanggal": "Tanggal", "site": "Site", "pit": "Pit", "status": "Status"
     })
 
-    # Enforce structure if empty
     expected_sump_cols = [
         "Tanggal", "Site", "Pit", "Elevasi Air (m)", "Critical Elevation (m)",
         "Volume Air Survey (m3)", "Plan Curah Hujan (mm)", "Curah Hujan (mm)",
         "Actual Catchment (Ha)", "Groundwater (m3)", "Status"
     ]
-    
-    # If empty or missing columns, re-initialize
     if df_s.empty or not all(col in df_s.columns for col in expected_sump_cols):
          df_s = pd.DataFrame(columns=expected_sump_cols)
 
@@ -78,7 +72,6 @@ def load_data():
         df_p = pd.DataFrame()
         
     df_p.columns = map(str.lower, df_p.columns)
-    
     if not df_p.empty:
         df_p['tanggal'] = pd.to_datetime(df_p['tanggal'])
 
@@ -92,7 +85,6 @@ def load_data():
         "Tanggal", "Site", "Pit", "Unit Code", 
         "Debit Plan (m3/h)", "Debit Actual (m3/h)", "EWH Plan", "EWH Actual"
     ]
-
     if df_p.empty or not all(col in df_p.columns for col in expected_pompa_cols):
         df_p = pd.DataFrame(columns=expected_pompa_cols)
     
@@ -129,19 +121,16 @@ def save_new_pompa(data):
 def overwrite_full_db(df_s, df_p):
     """Bulk replace tables."""
     conn = get_connection()
-    
     s_save = df_s.rename(columns={
         "Elevasi Air (m)": "elevasi_air", "Critical Elevation (m)": "critical_elevation",
         "Volume Air Survey (m3)": "volume_air_survey", "Plan Curah Hujan (mm)": "plan_curah_hujan",
         "Curah Hujan (mm)": "curah_hujan", "Actual Catchment (Ha)": "actual_catchment",
         "Groundwater (m3)": "groundwater"
     })
-    
     p_save = df_p.rename(columns={
         "Unit Code": "unit_code", "Debit Plan (m3/h)": "debit_plan",
         "Debit Actual (m3/h)": "debit_actual", "EWH Plan": "ewh_plan", "EWH Actual": "ewh_actual"
     })
-
     s_save.columns = map(str.lower, s_save.columns)
     p_save.columns = map(str.lower, p_save.columns)
 
@@ -150,54 +139,63 @@ def overwrite_full_db(df_s, df_p):
     p_save.to_sql('pompa', engine, if_exists='replace', index=False)
 
 def generate_dummy_data():
-    """Generates 30 days of dummy data."""
+    """Generates dummy data matching the logic from app_previous.py."""
     conn = get_connection()
     
-    dummy_prefix = "dummy_"
-    site_name = f"{dummy_prefix}Site_Demo"
-    pit_name = f"{dummy_prefix}Pit_Alpha"
-    pump_units = [f"{dummy_prefix}Pump_01", f"{dummy_prefix}Pump_02"]
+    # 1. Config based on PREVIOUS APP logic
+    dummy_prefix = "dummy_" # Keeping prefix so we can delete it easily later
     
-    end_date = date.today()
-    start_date = end_date - timedelta(days=30)
-    dates = pd.date_range(start=start_date, end=end_date)
+    # We map the real names to include the 'dummy_' prefix so deletion works safely
+    init_map = {
+        f"{dummy_prefix}Lais Coal Mine (LCM)": [f"{dummy_prefix}Sump Wijaya Barat", f"{dummy_prefix}Sump Wijaya Timur"],
+        f"{dummy_prefix}Wiraduta Sejahtera Langgeng (WSL)": [f"{dummy_prefix}Sump F01", f"{dummy_prefix}Sump F02"],
+        f"{dummy_prefix}Nusantara Energy (NE)": [f"{dummy_prefix}Sump S8"]
+    }
     
+    units = [f"{dummy_prefix}WP-01", f"{dummy_prefix}WP-02"]
+    
+    # 2. Generate Data Loop (30 Days)
+    today = date.today()
     sump_rows = []
     pump_rows = []
     
-    vol_tracker = 50000 
-    
-    for d in dates:
-        rain = random.choices([0, 0, 5, 15, 45], weights=[0.6, 0.1, 0.1, 0.1, 0.1])[0]
-        gw = 1000
-        inflow = (rain * 25 * 10) + gw
+    for i in range(30):
+        d = today - timedelta(days=i)
         
-        outflow = 0
-        for p_unit in pump_units:
-            ewh_act = random.uniform(10, 20)
-            deb_act = random.uniform(400, 550)
-            outflow += (ewh_act * deb_act)
-            
-            # Use exact Postgres column names (lowercase)
-            pump_rows.append({
-                "tanggal": d, "site": site_name, "pit": pit_name, "unit_code": p_unit,
-                "debit_plan": 500, "debit_actual": deb_act, 
-                "ewh_plan": 20, "ewh_actual": ewh_act
-            })
-            
-        vol_tracker = max(0, vol_tracker + inflow - outflow)
-        elev = 10 + (vol_tracker / 10000)
+        for site, pits in init_map.items():
+            for pit in pits:
+                # --- Sump Data (Sine Wave Logic) ---
+                # Logic copied from app_previous.py: elev = 10.0 + (np.sin(i/10) * 2)
+                elev = 10.0 + (np.sin(i/10) * 2)
+                
+                sump_rows.append({
+                    "tanggal": d, 
+                    "site": site, 
+                    "pit": pit, 
+                    "elevasi_air": round(elev, 2), 
+                    "critical_elevation": 13.0,
+                    "volume_air_survey": int(elev * 5000), 
+                    "plan_curah_hujan": 20.0, 
+                    "curah_hujan": np.random.randint(0, 40),
+                    "actual_catchment": 25.0, 
+                    "groundwater": 0.0,
+                    "status": "BAHAYA" if elev > 13.0 else "AMAN"
+                })
+                
+                # --- Pump Data ---
+                for u in units:
+                    pump_rows.append({
+                        "tanggal": d, 
+                        "site": site, 
+                        "pit": pit, 
+                        "unit_code": u,
+                        "debit_plan": 500, 
+                        "debit_actual": np.random.randint(400, 500), 
+                        "ewh_plan": 20.0, 
+                        "ewh_actual": round(np.random.uniform(15, 20), 1)
+                    })
         
-        # Use exact Postgres column names (lowercase)
-        sump_rows.append({
-            "tanggal": d, "site": site_name, "pit": pit_name, 
-            "elevasi_air": elev, "critical_elevation": 14.0,
-            "volume_air_survey": vol_tracker, 
-            "plan_curah_hujan": 15.0, "curah_hujan": rain,
-            "actual_catchment": 25.0, "groundwater": gw,
-            "status": "BAHAYA" if elev > 14 else "AMAN"
-        })
-        
+    # 3. Save to DB
     df_s_dummy = pd.DataFrame(sump_rows)
     df_p_dummy = pd.DataFrame(pump_rows)
     

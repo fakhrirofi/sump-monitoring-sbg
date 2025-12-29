@@ -117,63 +117,104 @@ with tab_input:
         st.info("Input Data Harian (Saved to Neon Cloud)")
         with st.expander("➕ Input Harian Baru", expanded=True):
             d_in = st.date_input("Tanggal", date.today())
-            p_in = st.selectbox("Sump", st.session_state['site_map'].get(selected_site, []), key="pi")
             
-            cl, cr = st.columns(2)
-            with cl:
-                with st.form("fs"):
-                    st.markdown("<b>Data Sump</b>", unsafe_allow_html=True)
-                    e_a = st.number_input("Elevasi (m)", format="%.2f")
-                    v_a = st.number_input("Volume Survey (m3)", step=100)
-                    r_p = st.number_input("Rain Plan (mm)", value=20.0)
-                    r_a = st.number_input("Rain Act (mm)", 0.0)
-                    gw_v = st.number_input("Groundwater (m3)", 0.0)
-                    
-                    if st.form_submit_button("Simpan Sump"):
-                        new = {
-                            "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
-                            "Elevasi Air (m)": e_a, "Critical Elevation (m)": 13.0,
-                            "Volume Air Survey (m3)": v_a, "Plan Curah Hujan (mm)": r_p,
-                            "Curah Hujan (mm)": r_a, "Actual Catchment (Ha)": 25.0,
-                            "Groundwater (m3)": gw_v,
-                            "Status": "BAHAYA" if e_a > 13 else "AMAN"
-                        }
-                        db.save_new_sump(new)
-                        st.session_state['data_sump'], _ = db.load_data() # Reload
-                        st.success("Sump Saved!")
-                        st.rerun()
+            # --- FIXED LOGIC FOR SUMP SELECTION ---
+            # Get existing sumps for this site
+            existing_sumps = st.session_state['site_map'].get(selected_site, [])
+            
+            p_in = None # Variable to hold the final chosen sump name
+            
+            # If no sumps exist (New Site), force Text Input
+            if not existing_sumps:
+                st.warning(f"Belum ada Sump di {selected_site}. Silakan buat baru.")
+                p_in = st.text_input("Nama Sump Baru (Wajib Diisi)", placeholder="Contoh: Sump Utara")
+            else:
+                # If sumps exist, allow user to choose or create new
+                mode_input = st.radio("Mode Input Sump:", ["Pilih Sump Ada", "Buat Sump Baru"], horizontal=True)
+                
+                if mode_input == "Pilih Sump Ada":
+                    p_in = st.selectbox("Pilih Sump", existing_sumps)
+                else:
+                    p_in = st.text_input("Nama Sump Baru", placeholder="Contoh: Sump Selatan")
 
-            with cr:
-                with st.form("fp"):
-                    st.markdown("<b>Data Pompa</b>", unsafe_allow_html=True)
-                    uc = st.text_input("Unit Code (e.g., WP-01)")
-                    dp = st.number_input("Debit Plan (m3/h)", value=500)
-                    da = st.number_input("Debit Actual (m3/h)", 0)
-                    ea = st.number_input("EWH Actual (Jam)", 0.0)
-                    
-                    if st.form_submit_button("Simpan Pompa"):
-                        newp = {
-                            "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
-                            "Unit Code": uc, "Debit Plan (m3/h)": dp, "Debit Actual (m3/h)": da,
-                            "EWH Plan": 20.0, "EWH Actual": ea
-                        }
-                        db.save_new_pompa(newp)
-                        _, st.session_state['data_pompa'] = db.load_data() # Reload
-                        st.success("Pompa Saved!")
-                        st.rerun()
-        
+            # --- FORM INPUT ---
+            # Only show forms if p_in is valid (not empty string)
+            if p_in:
+                cl, cr = st.columns(2)
+                with cl:
+                    with st.form("fs"):
+                        st.markdown(f"<b>Data Sump: {p_in}</b>", unsafe_allow_html=True)
+                        e_a = st.number_input("Elevasi (m)", format="%.2f")
+                        v_a = st.number_input("Volume Survey (m3)", step=100)
+                        r_p = st.number_input("Rain Plan (mm)", value=20.0)
+                        r_a = st.number_input("Rain Act (mm)", 0.0)
+                        gw_v = st.number_input("Groundwater (m3)", 0.0)
+                        
+                        if st.form_submit_button("Simpan Sump"):
+                            new = {
+                                "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
+                                "Elevasi Air (m)": e_a, "Critical Elevation (m)": 13.0,
+                                "Volume Air Survey (m3)": v_a, "Plan Curah Hujan (mm)": r_p,
+                                "Curah Hujan (mm)": r_a, "Actual Catchment (Ha)": 25.0,
+                                "Groundwater (m3)": gw_v,
+                                "Status": "BAHAYA" if e_a > 13 else "AMAN"
+                            }
+                            db.save_new_sump(new)
+                            
+                            # Refresh Data & Site Map immediately
+                            st.session_state['data_sump'], _ = db.load_data()
+                            # Rebuild map so the new sump appears in dropdowns next time
+                            st.session_state.pop('site_map', None)
+                            
+                            st.success(f"Sump '{p_in}' Saved!")
+                            st.rerun()
+
+                with cr:
+                    with st.form("fp"):
+                        st.markdown(f"<b>Data Pompa: {p_in}</b>", unsafe_allow_html=True)
+                        uc = st.text_input("Unit Code (e.g., WP-01)")
+                        dp = st.number_input("Debit Plan (m3/h)", value=500)
+                        da = st.number_input("Debit Actual (m3/h)", 0)
+                        ea = st.number_input("EWH Actual (Jam)", 0.0)
+                        
+                        if st.form_submit_button("Simpan Pompa"):
+                            newp = {
+                                "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
+                                "Unit Code": uc, "Debit Plan (m3/h)": dp, "Debit Actual (m3/h)": da,
+                                "EWH Plan": 20.0, "EWH Actual": ea
+                            }
+                            db.save_new_pompa(newp)
+                            _, st.session_state['data_pompa'] = db.load_data() # Reload
+                            st.success(f"Pompa for '{p_in}' Saved!")
+                            st.rerun()
+            else:
+                if not existing_sumps:
+                    st.info("Silakan ketik nama Sump baru di atas untuk memulai.")
+
         st.divider()
-        st.markdown("### 🛠️ Bulk Edit")
+        st.markdown("### 🛠️ Bulk Edit (Delete Data here)")
+        st.caption("Tips: Select rows and press 'Delete' on your keyboard to remove data. Click Update to save changes.")
+        
         t1, t2 = st.tabs(["Edit Sump", "Edit Pompa"])
         with t1:
-            ed_s = st.data_editor(st.session_state.data_sump[st.session_state.data_sump['Site']==selected_site], num_rows="dynamic", key="es")
+            # Sump Editor
+            curr_s = st.session_state.data_sump[st.session_state.data_sump['Site']==selected_site]
+            ed_s = st.data_editor(curr_s, num_rows="dynamic", key="es")
+            
             if st.button("💾 UPDATE SUMP DB"):
                 full_s = pd.concat([st.session_state.data_sump[st.session_state.data_sump['Site']!=selected_site], ed_s], ignore_index=True)
                 db.overwrite_full_db(full_s, st.session_state.data_pompa)
                 st.session_state['data_sump'] = full_s
+                
+                # Rebuild map in case sumps were renamed or deleted
+                st.session_state.pop('site_map', None)
                 st.success("Updated!"); st.rerun()
+                
         with t2:
-            ed_p = st.data_editor(st.session_state.data_pompa[st.session_state.data_pompa['Site']==selected_site], num_rows="dynamic", key="ep")
+            # Pompa Editor
+            curr_p = st.session_state.data_pompa[st.session_state.data_pompa['Site']==selected_site]
+            ed_p = st.data_editor(curr_p, num_rows="dynamic", key="ep")
+            
             if st.button("💾 UPDATE POMPA DB"):
                 full_p = pd.concat([st.session_state.data_pompa[st.session_state.data_pompa['Site']!=selected_site], ed_p], ignore_index=True)
                 db.overwrite_full_db(st.session_state.data_sump, full_p)
