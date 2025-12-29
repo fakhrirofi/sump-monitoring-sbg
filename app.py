@@ -121,7 +121,6 @@ with st.sidebar:
     if os.path.exists(logo_filename):
         st.image(logo_filename, use_container_width=True)
     else:
-        # Fallback teks jika gambar belum diupload
         st.markdown("## 🏢 BARA TAMA WIJAYA")
         st.caption("⚠️ Upload file logo ke folder repository agar gambar muncul.")
     
@@ -186,9 +185,8 @@ df_wb['Diff Volume'] = df_wb['Volume Air Survey (m3)'] - df_wb['Volume Teoritis'
 df_wb['Error %'] = (df_wb['Diff Volume'].abs() / df_wb['Volume Air Survey (m3)']) * 100
 df_wb_dash = df_wb[(df_wb['Tanggal'].dt.year == sel_year) & (df_wb['Tanggal'].dt.month == sel_month_int)].sort_values(by="Tanggal")
 
-# --- FUNGSI LOGIN FIX (ANTI ERROR DUPLICATE ID) ---
+# --- FUNGSI LOGIN FIX ---
 def render_login_form(unique_key):
-    # Menggunakan unique_key agar tidak bentrok antar Tabs
     with st.form(key=f"login_form_{unique_key}"):
         st.subheader("🔒 Area Terbatas")
         user = st.text_input("Username")
@@ -219,16 +217,138 @@ with tab_dash:
         c4.markdown(f"<div style='background-color:{clr};color:white;padding:10px;border-radius:5px;text-align:center;'>{last['Status']}</div>", unsafe_allow_html=True)
         
         st.markdown("---")
-        # Grafik Sump
+        
+        # --- 1. GRAFIK ELEVASI & VOLUME (DENGAN LABEL) ---
+        st.subheader("🌊 Tren Elevasi & Volume Sump")
         fig_s = go.Figure()
-        fig_s.add_trace(go.Bar(x=df_wb_dash['Tanggal'], y=df_wb_dash['Volume Air Survey (m3)'], name='Vol', marker_color='#95a5a6', opacity=0.6, yaxis='y2'))
-        fig_s.add_trace(go.Scatter(x=df_wb_dash['Tanggal'], y=df_wb_dash['Elevasi Air (m)'], name='Elevasi', line=dict(color='#e67e22', width=3)))
+        
+        # Bar Volume
+        fig_s.add_trace(go.Bar(
+            x=df_wb_dash['Tanggal'], 
+            y=df_wb_dash['Volume Air Survey (m3)'], 
+            name='Vol', 
+            marker_color='#95a5a6', 
+            opacity=0.6, 
+            yaxis='y2',
+            text=df_wb_dash['Volume Air Survey (m3)'], # Label Angka
+            texttemplate='%{text:.0s}', # Format (e.g., 20k)
+            textposition='inside'
+        ))
+        
+        # Line Elevasi
+        fig_s.add_trace(go.Scatter(
+            x=df_wb_dash['Tanggal'], 
+            y=df_wb_dash['Elevasi Air (m)'], 
+            name='Elevasi', 
+            mode='lines+markers+text',
+            line=dict(color='#e67e22', width=3),
+            text=df_wb_dash['Elevasi Air (m)'], # Label Angka
+            texttemplate='%{text:.2f}', # Format 2 desimal
+            textposition='top center'
+        ))
+        
         fig_s.add_trace(go.Scatter(x=df_wb_dash['Tanggal'], y=df_wb_dash['Critical Elevation (m)'], name='Limit', line=dict(color='red', dash='dash')))
-        fig_s.update_layout(yaxis2=dict(overlaying='y', side='right', showgrid=False), legend=dict(orientation='h', y=1.1), height=400, margin=dict(t=10))
+        fig_s.update_layout(
+            yaxis2=dict(overlaying='y', side='right', showgrid=False, title="Volume (m3)"),
+            yaxis=dict(title="Elevasi (m)"),
+            legend=dict(orientation='h', y=1.1), 
+            height=450,
+            margin=dict(t=30)
+        )
         st.plotly_chart(fig_s, use_container_width=True)
 
-        # Water Balance
-        st.subheader("⚖️ Water Balance")
+        # --- 2. GRAFIK CURAH HUJAN (PLAN vs ACTUAL) ---
+        st.subheader("🌧️ Curah Hujan: Plan vs Actual")
+        fig_r = go.Figure()
+        
+        # Actual Rain (Bar)
+        fig_r.add_trace(go.Bar(
+            x=df_wb_dash['Tanggal'], 
+            y=df_wb_dash['Curah Hujan (mm)'], 
+            name='Actual Rain', 
+            marker_color='#3498db',
+            text=df_wb_dash['Curah Hujan (mm)'], # Label Angka
+            textposition='auto'
+        ))
+        
+        # Plan Rain (Line)
+        fig_r.add_trace(go.Scatter(
+            x=df_wb_dash['Tanggal'], 
+            y=df_wb_dash['Plan Curah Hujan (mm)'], 
+            name='Plan Rain', 
+            mode='lines+markers+text',
+            line=dict(color='#e74c3c', width=2, dash='dot'),
+            text=df_wb_dash['Plan Curah Hujan (mm)'],
+            textposition='top center'
+        ))
+        
+        fig_r.update_layout(
+            yaxis=dict(title="Curah Hujan (mm)"),
+            legend=dict(orientation='h', y=1.1),
+            height=400,
+            margin=dict(t=30)
+        )
+        st.plotly_chart(fig_r, use_container_width=True)
+
+        # --- 3. GRAFIK POMPA (DEBIT & EWH) ---
+        st.markdown("---")
+        st.subheader("⚙️ Performa Pompa (Rata-rata Harian)")
+        
+        # Agregasi Data Pompa per Hari (Rata-rata)
+        df_p_daily_agg = df_p_filt.groupby('Tanggal')[['Debit Plan (m3/h)', 'Debit Actual (m3/h)', 'EWH Plan', 'EWH Actual']].mean().reset_index()
+        
+        col_p1, col_p2 = st.columns(2)
+        
+        with col_p1:
+            st.caption("**Debit: Plan vs Actual (m3/h)**")
+            fig_d = go.Figure()
+            # Actual Debit (Bar)
+            fig_d.add_trace(go.Bar(
+                x=df_p_daily_agg['Tanggal'], 
+                y=df_p_daily_agg['Debit Actual (m3/h)'], 
+                name='Act Debit', 
+                marker_color='#2ecc71',
+                text=df_p_daily_agg['Debit Actual (m3/h)'],
+                texttemplate='%{text:.0f}',
+                textposition='auto'
+            ))
+            # Plan Debit (Line)
+            fig_d.add_trace(go.Scatter(
+                x=df_p_daily_agg['Tanggal'], 
+                y=df_p_daily_agg['Debit Plan (m3/h)'], 
+                name='Plan Debit', 
+                mode='lines',
+                line=dict(color='#2c3e50', width=2, dash='dash')
+            ))
+            fig_d.update_layout(legend=dict(orientation='h', y=1.1), height=350, margin=dict(t=20, l=10, r=10))
+            st.plotly_chart(fig_d, use_container_width=True)
+            
+        with col_p2:
+            st.caption("**EWH: Plan vs Actual (Jam)**")
+            fig_e = go.Figure()
+            # Actual EWH (Bar)
+            fig_e.add_trace(go.Bar(
+                x=df_p_daily_agg['Tanggal'], 
+                y=df_p_daily_agg['EWH Actual'], 
+                name='Act EWH', 
+                marker_color='#d35400',
+                text=df_p_daily_agg['EWH Actual'],
+                texttemplate='%{text:.1f}',
+                textposition='auto'
+            ))
+            # Plan EWH (Line)
+            fig_e.add_trace(go.Scatter(
+                x=df_p_daily_agg['Tanggal'], 
+                y=df_p_daily_agg['EWH Plan'], 
+                name='Plan EWH', 
+                mode='lines',
+                line=dict(color='#2c3e50', width=2, dash='dash')
+            ))
+            fig_e.update_layout(legend=dict(orientation='h', y=1.1), height=350, margin=dict(t=20, l=10, r=10))
+            st.plotly_chart(fig_e, use_container_width=True)
+
+        # Water Balance Table
+        st.subheader("⚖️ Water Balance Summary")
         wb = last
         w1, w2, w3, w4, w5 = st.columns(5)
         w1.metric("Vol Kemarin", f"{wb['Volume Kemarin']:,.0f}")
@@ -244,7 +364,6 @@ with tab_dash:
 # TAB 2: INPUT
 with tab_input:
     if not st.session_state['logged_in']:
-        # Panggil fungsi login dengan KUNCI UNIK 'input'
         render_login_form(unique_key="input_tab")
     else:
         st.info("💾 Setiap data yang disimpan akan otomatis ditulis ke file CSV (Permanen).")
@@ -325,7 +444,6 @@ with tab_db:
 # TAB 4: SETTING
 with tab_admin:
     if not st.session_state['logged_in']:
-        # Panggil fungsi login dengan KUNCI UNIK 'admin'
         render_login_form(unique_key="admin_tab")
     else:
         st.write("⚙️ Pengaturan Site")
