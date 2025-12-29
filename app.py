@@ -25,12 +25,12 @@ st.markdown("""
 
 # --- 2. INITIALIZE SESSION STATE ---
 
-# A. DATA LOGIN (Sesuai Request)
+# A. DATA LOGIN
 USERS = {
     "englcm": "eng123",  # Admin LCM
     "engwsl": "eng123",  # Admin WSL
     "engne": "eng123",   # Admin NE
-    "admin": "eng123"    # Super Admin (Backup)
+    "admin": "eng123"    # Super Admin
 }
 
 if 'logged_in' not in st.session_state:
@@ -114,7 +114,6 @@ with st.sidebar:
 
     # PILIH SITE (Tanpa "All Sites")
     current_sites = list(st.session_state['site_map'].keys())
-    # Default index 0 automatically selects the first site
     selected_site = st.selectbox("📍 Site", current_sites)
     
     pit_options = ["All Pits"]
@@ -134,7 +133,7 @@ with st.sidebar:
 df_s = st.session_state.data_sump.copy()
 df_p = st.session_state.data_pompa.copy()
 
-# Filter Wajib per Site (Tidak ada All Sites lagi)
+# Filter Wajib per Site
 df_s = df_s[df_s['Site'] == selected_site]
 df_p = df_p[df_p['Site'] == selected_site]
 
@@ -281,67 +280,119 @@ with tab_dash:
                     st.plotly_chart(fig_e, use_container_width=True)
 
 # =========================================
-# TAB 2: INPUT (LOGIN REQUIRED)
+# TAB 2: INPUT (LOGIN REQUIRED) - UPDATED
 # =========================================
 with tab_input:
     if not st.session_state['logged_in']:
         render_login_form()
     else:
-        st.subheader(f"📝 Input Data: {selected_site}")
+        st.subheader(f"📝 Kelola Data: {selected_site}")
         st.caption(f"Logged in as: {st.session_state['username']}")
-        
-        with st.container():
-            c1, c2, c3 = st.columns(3)
-            date_in = c1.date_input("Tanggal", date.today())
+
+        # --- BAGIAN 1: INPUT DATA BARU ---
+        with st.expander("➕ Input Data Baru (Harian)", expanded=True):
+            with st.container():
+                c1, c2, c3 = st.columns(3)
+                date_in = c1.date_input("Tanggal", date.today())
+                st.info(f"Site: **{selected_site}**")
+                site_in = selected_site 
+                pit_in = c3.selectbox("Pit", st.session_state['site_map'][selected_site], key="p_in")
             
-            # Otomatis ikut Site yang dipilih di Sidebar (agar tidak salah input site lain)
-            st.info(f"Menginput untuk: **{selected_site}**")
-            site_in = selected_site 
-            
-            # Pit tetap bisa milih dalam site tersebut
-            pit_in = c3.selectbox("Pit", st.session_state['site_map'][selected_site], key="p_in")
-        
+            cl, cr = st.columns(2)
+            with cl:
+                st.markdown("**Data Sump**")
+                with st.form("f_sump"):
+                    c_s1, c_s2 = st.columns(2)
+                    e_act = c_s1.number_input("Elevasi (m)", format="%.2f")
+                    e_crit = c_s2.number_input("Critical (m)", value=13.0)
+                    vol = c_s1.number_input("Volume Survey (m3)", step=100)
+                    catch = c_s2.number_input("Catchment (Ha)", format="%.2f")
+                    c_r1, c_r2 = st.columns(2)
+                    rain_plan = c_r1.number_input("Hujan Plan (mm)", value=0.0)
+                    rain_act = c_r2.number_input("Hujan Actual (mm)", value=0.0)
+                    if st.form_submit_button("Simpan Sump"):
+                        new_row = {
+                            "Tanggal": pd.to_datetime(date_in), "Site": site_in, "Pit": pit_in,
+                            "Elevasi Air (m)": e_act, "Critical Elevation (m)": e_crit,
+                            "Volume Air Survey (m3)": vol, "Plan Curah Hujan (mm)": rain_plan,
+                            "Curah Hujan (mm)": rain_act, "Actual Catchment (Ha)": catch, 
+                            "Status": "BAHAYA" if e_act > e_crit else "AMAN"
+                        }
+                        st.session_state.data_sump = pd.concat([pd.DataFrame([new_row]), st.session_state.data_sump], ignore_index=True)
+                        st.success("Data Sump Tersimpan!")
+            with cr:
+                st.markdown("**Data Pompa**")
+                with st.form("f_pump"):
+                    u_code = st.text_input("Unit Code (e.g. WP-01)")
+                    c_p1, c_p2 = st.columns(2)
+                    d_plan = c_p1.number_input("Debit Plan", value=500)
+                    d_act = c_p2.number_input("Debit Act", value=450)
+                    c_p3, c_p4 = st.columns(2)
+                    ewh_plan = c_p3.number_input("EWH Plan", value=20.0)
+                    ewh_act = c_p4.number_input("EWH Act", value=18.0)
+                    if st.form_submit_button("Simpan Pompa"):
+                        new_p = {
+                            "Tanggal": pd.to_datetime(date_in), "Site": site_in, "Pit": pit_in,
+                            "Unit Code": u_code, "Debit Plan (m3/h)": d_plan,
+                            "Debit Actual (m3/h)": d_act, "EWH Plan": ewh_plan, "EWH Actual": ewh_act
+                        }
+                        st.session_state.data_pompa = pd.concat([pd.DataFrame([new_p]), st.session_state.data_pompa], ignore_index=True)
+                        st.success("Data Pompa Tersimpan!")
+
+        # --- BAGIAN 2: EDIT DATA LAMA (SEPERTI EXCEL) ---
         st.divider()
-        cl, cr = st.columns(2)
-        with cl:
-            st.markdown("**1. Data Sump**")
-            with st.form("f_sump"):
-                c_s1, c_s2 = st.columns(2)
-                e_act = c_s1.number_input("Elevasi (m)", format="%.2f")
-                e_crit = c_s2.number_input("Critical (m)", value=13.0)
-                vol = c_s1.number_input("Volume Survey (m3)", step=100)
-                catch = c_s2.number_input("Catchment (Ha)", format="%.2f")
-                c_r1, c_r2 = st.columns(2)
-                rain_plan = c_r1.number_input("Hujan Plan (mm)", value=0.0)
-                rain_act = c_r2.number_input("Hujan Actual (mm)", value=0.0)
-                if st.form_submit_button("Simpan Sump"):
-                    new_row = {
-                        "Tanggal": pd.to_datetime(date_in), "Site": site_in, "Pit": pit_in,
-                        "Elevasi Air (m)": e_act, "Critical Elevation (m)": e_crit,
-                        "Volume Air Survey (m3)": vol, "Plan Curah Hujan (mm)": rain_plan,
-                        "Curah Hujan (mm)": rain_act, "Actual Catchment (Ha)": catch, 
-                        "Status": "BAHAYA" if e_act > e_crit else "AMAN"
-                    }
-                    st.session_state.data_sump = pd.concat([pd.DataFrame([new_row]), st.session_state.data_sump], ignore_index=True)
-                    st.success("Data Sump Tersimpan!")
-        with cr:
-            st.markdown("**2. Data Pompa**")
-            with st.form("f_pump"):
-                u_code = st.text_input("Unit Code (e.g. WP-01)")
-                c_p1, c_p2 = st.columns(2)
-                d_plan = c_p1.number_input("Debit Plan", value=500)
-                d_act = c_p2.number_input("Debit Act", value=450)
-                c_p3, c_p4 = st.columns(2)
-                ewh_plan = c_p3.number_input("EWH Plan", value=20.0)
-                ewh_act = c_p4.number_input("EWH Act", value=18.0)
-                if st.form_submit_button("Simpan Pompa"):
-                    new_p = {
-                        "Tanggal": pd.to_datetime(date_in), "Site": site_in, "Pit": pit_in,
-                        "Unit Code": u_code, "Debit Plan (m3/h)": d_plan,
-                        "Debit Actual (m3/h)": d_act, "EWH Plan": ewh_plan, "EWH Actual": ewh_act
-                    }
-                    st.session_state.data_pompa = pd.concat([pd.DataFrame([new_p]), st.session_state.data_pompa], ignore_index=True)
-                    st.success("Data Pompa Tersimpan!")
+        st.subheader("✏️ Edit Data Lama (Excel Mode)")
+        st.info("Klik langsung pada tabel di bawah untuk mengedit angka, lalu tekan tombol 'Simpan Perubahan'.")
+
+        tab_edit_sump, tab_edit_pump = st.tabs(["Edit Sump", "Edit Pompa"])
+
+        # EDIT SUMP
+        with tab_edit_sump:
+            # 1. Ambil data khusus site ini
+            df_current_site = st.session_state.data_sump[st.session_state.data_sump['Site'] == selected_site].sort_values(by="Tanggal", ascending=False)
+            
+            # 2. Tampilkan Editor
+            edited_sump = st.data_editor(
+                df_current_site, 
+                num_rows="dynamic", 
+                hide_index=True,
+                use_container_width=True,
+                key="editor_sump"
+            )
+
+            # 3. Tombol Save Logic
+            if st.button("💾 Simpan Perubahan Sump"):
+                # Hapus data lama site ini dari Master Data
+                st.session_state.data_sump = st.session_state.data_sump[st.session_state.data_sump['Site'] != selected_site]
+                # Masukkan data hasil editan
+                st.session_state.data_sump = pd.concat([st.session_state.data_sump, edited_sump], ignore_index=True)
+                st.session_state.data_sump['Tanggal'] = pd.to_datetime(st.session_state.data_sump['Tanggal']) # Safety convert
+                st.success("Data Sump Berhasil Di-update!")
+                st.rerun()
+
+        # EDIT POMPA
+        with tab_edit_pump:
+            # 1. Ambil data khusus site ini
+            df_current_pump = st.session_state.data_pompa[st.session_state.data_pompa['Site'] == selected_site].sort_values(by="Tanggal", ascending=False)
+            
+            # 2. Tampilkan Editor
+            edited_pump = st.data_editor(
+                df_current_pump, 
+                num_rows="dynamic", 
+                hide_index=True,
+                use_container_width=True,
+                key="editor_pump"
+            )
+
+            # 3. Tombol Save Logic
+            if st.button("💾 Simpan Perubahan Pompa"):
+                # Hapus data lama site ini dari Master Data
+                st.session_state.data_pompa = st.session_state.data_pompa[st.session_state.data_pompa['Site'] != selected_site]
+                # Masukkan data hasil editan
+                st.session_state.data_pompa = pd.concat([st.session_state.data_pompa, edited_pump], ignore_index=True)
+                st.session_state.data_pompa['Tanggal'] = pd.to_datetime(st.session_state.data_pompa['Tanggal'])
+                st.success("Data Pompa Berhasil Di-update!")
+                st.rerun()
 
 # =========================================
 # TAB 3: DATABASE (PUBLIC)
