@@ -1,89 +1,98 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from datetime import date
 
-# --- 1. SETUP DATA DUMMY (MENGGANTIKAN DATABASE SEMENTARA) ---
-# Struktur data dictionary untuk 3 Site
-sites_data = {
-    "Lais Coal Mine": {
-        "pits": ["Pit Utara", "Pit Selatan"],
-        "pumps": ["WP1203 (Multiflo)", "WP1005 (KSB)"],
-        "critical_level": 12.0
-    },
-    "Wiraduta Sejahtera Langgeng": {
-        "pits": ["Pit A", "Pit B1"],
-        "pumps": ["WP2001 (Sykes)", "WP2002 (Sykes)"],
-        "critical_level": 45.0
-    },
-    "Nusantara Energy": {
-        "pits": ["Pit Garuda"],
-        "pumps": ["WP3001 (Multiflo)"],
-        "critical_level": 8.5
+# --- CONFIG & DUMMY DATA SETUP ---
+st.set_page_config(page_title="Sump Monitor - Input System", layout="wide")
+
+# Simulasi Database Awal (Hasil Import dari Excel Anda)
+if 'db_sump_logs' not in st.session_state:
+    # Ini ceritanya data yang sudah di-import dari Excel kemarin
+    data_awal = {
+        'Tanggal': [date(2025, 12, 24), date(2025, 12, 25)],
+        'Site': ['Lais Coal Mine', 'Lais Coal Mine'],
+        'Sump': ['Pit Utara', 'Pit Utara'],
+        'Curah Hujan (mm)': [69.0, 0.0],
+        'Elevasi (m)': [11.7, 12.0],
+        'Volume Air (m3)': [7739, 8500],
+        'Status': ['Safe', 'Warning']
     }
-}
+    st.session_state.db_sump_logs = pd.DataFrame(data_awal)
 
-# --- 2. LAYOUT DASHBOARD ---
-st.set_page_config(page_title="Mining Water Management", layout="wide")
+# --- SIDEBAR MENU ---
+menu = st.sidebar.radio("Menu", ["Dashboard", "Input Data Harian", "Edit Data (History)"])
 
-# Sidebar Navigasi
-st.sidebar.title("🌊 Water Management")
-selected_site = st.sidebar.selectbox("Pilih Site:", list(sites_data.keys()))
+# --- 1. MENU DASHBOARD (Read) ---
+if menu == "Dashboard":
+    st.title("📊 Monitoring Overview")
+    st.info("Data di bawah ini berasal dari database yang Anda input.")
+    # Tampilkan Grafik
+    df = st.session_state.db_sump_logs
+    st.line_chart(df, x='Tanggal', y='Elevasi (m)')
+    st.dataframe(df, use_container_width=True)
 
-# Ambil data berdasarkan site yang dipilih
-current_site_info = sites_data[selected_site]
-selected_pit = st.sidebar.selectbox("Pilih Lokasi (Sump):", current_site_info["pits"])
-
-# --- 3. KONTEN UTAMA ---
-st.title(f"Dashboard: {selected_site}")
-st.markdown(f"**Monitoring Sump:** {selected_pit}")
-
-# Baris Metrik Atas (KPI)
-col1, col2, col3, col4 = st.columns(4)
-
-# Simulasi angka acak agar terlihat hidup
-elevasi_aktual = np.random.uniform(5, 14) 
-is_danger = elevasi_aktual > current_site_info['critical_level']
-status_color = "🔴 BAHAYA" if is_danger else "🟢 AMAN"
-
-with col1:
-    st.metric("Status Keselamatan", status_color)
-with col2:
-    st.metric("Curah Hujan (Hari Ini)", "45 mm", "+12mm")
-with col3:
-    st.metric("Elevasi Air", f"{elevasi_aktual:.2f} m", f"Batas: {current_site_info['critical_level']} m")
-with col4:
-    st.metric("Total Pompa Running", f"{len(current_site_info['pumps'])} Unit")
-
-st.divider()
-
-# --- 4. VISUALISASI GRAFIK ---
-c1, c2 = st.columns([2, 1])
-
-with c1:
-    st.subheader("Tren Elevasi Air vs Batas Kritis")
-    # Membuat data dummy chart
-    dates = pd.date_range(start="2025-12-01", periods=10)
-    chart_data = pd.DataFrame({
-        'Tanggal': dates,
-        'Elevasi Aktual': np.random.uniform(8, 13, 10),
-        'Critical Level': [current_site_info['critical_level']] * 10
-    })
-    st.line_chart(chart_data, x='Tanggal', y=['Elevasi Aktual', 'Critical Level'], color=["#0000FF", "#FF0000"])
-
-with c2:
-    st.subheader("Performa Pompa (Hari Ini)")
-    # Menampilkan grid status pompa
-    pump_df = pd.DataFrame({
-        "Unit Code": current_site_info['pumps'],
-        "Flowrate Plan (m3/h)": [500, 450] if len(current_site_info['pumps']) > 1 else [500],
-        "Actual (m3/h)": [480, 200] if len(current_site_info['pumps']) > 1 else [480],
-    })
-    # Hitung efisiensi
-    pump_df["Efisiensi"] = (pump_df["Actual (m3/h)"] / pump_df["Flowrate Plan (m3/h)"]) * 100
+# --- 2. MENU INPUT HARIAN (Create) ---
+elif menu == "Input Data Harian":
+    st.title("📝 Input Data Harian")
     
-    st.dataframe(pump_df.style.highlight_between(left=0, right=50, subset="Efisiensi", color="#ffcccc"))
-    st.caption("*Merah: Efisiensi di bawah 50% (Perlu Cek Mekanik)")
+    with st.form("input_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            input_site = st.selectbox("Pilih Site", ["Lais Coal Mine", "Wiraduta", "Nusantara"])
+            input_sump = st.selectbox("Pilih Sump", ["Pit Utara", "Pit Selatan"])
+        with c2:
+            input_date = st.date_input("Tanggal", date.today())
+        
+        st.subheader("Data Hidrologi")
+        c3, c4 = st.columns(2)
+        in_ch = c3.number_input("Curah Hujan (mm)", min_value=0.0)
+        in_elev = c4.number_input("Elevasi Aktual (m)", min_value=0.0)
+        
+        # Tombol Submit
+        submitted = st.form_submit_button("Simpan Data")
+        
+        if submitted:
+            # Logika Simpan ke Database
+            new_data = {
+                'Tanggal': input_date,
+                'Site': input_site,
+                'Sump': input_sump,
+                'Curah Hujan (mm)': in_ch,
+                'Elevasi (m)': in_elev,
+                'Volume Air (m3)': in_elev * 1000, # Rumus dummy
+                'Status': 'Safe' if in_elev < 12 else 'Danger'
+            }
+            # Tambahkan ke session state (Database sementara)
+            st.session_state.db_sump_logs = pd.concat([
+                pd.DataFrame([new_data]), 
+                st.session_state.db_sump_logs
+            ], ignore_index=True)
+            
+            st.success("✅ Data berhasil disimpan!")
 
-# --- 5. LOGIC WARNING ---
-if elevasi_aktual > current_site_info['critical_level']:
-    st.error(f"⚠️ PERINGATAN: Air di {selected_pit} sudah melewati batas aman! Segera aktifkan pompa cadangan.")
+# --- 3. MENU EDIT DATA / KOREKSI (Update) ---
+elif menu == "Edit Data (History)":
+    st.title("✏️ Koreksi Data (Excel Mode)")
+    st.markdown("Klik langsung pada sel tabel di bawah untuk mengedit kesalahan input.")
+    
+    # Fitur Data Editor (Mirip Excel)
+    edited_df = st.data_editor(
+        st.session_state.db_sump_logs,
+        num_rows="dynamic", # Bisa tambah baris
+        use_container_width=True,
+        key="data_editor"
+    )
+    
+    # Tombol untuk commit perubahan permanen
+    if st.button("Simpan Perubahan Koreksi"):
+        # Di sini logic update ke SQL Database
+        st.session_state.db_sump_logs = edited_df
+        
+        # Validasi sederhana
+        st.session_state.db_sump_logs['Status'] = np.where(
+            st.session_state.db_sump_logs['Elevasi (m)'] > 12, 'Danger', 'Safe'
+        )
+        
+        st.success("✅ Database telah diperbarui dengan data koreksi Anda.")
+        st.rerun()
