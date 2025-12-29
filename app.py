@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Agar Data Dummy STABIL (Tidak berubah-ubah)
+# Agar Data Dummy STABIL
 np.random.seed(42)
 
 # CSS Styling
@@ -43,7 +43,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. FILE MANAGEMENT SYSTEM (V10) ---
-# Gunakan nama file v10 agar kolom Groundwater & Debit Plan tersimpan
 FILE_SUMP = "db_sump_v10.csv"   
 FILE_POMPA = "db_pompa_v10.csv"
 
@@ -132,7 +131,14 @@ USERS = {"englcm": "eng123", "engwsl": "eng123", "engne": "eng123", "admin": "en
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    st.markdown("## 🏢 BARA TAMA WIJAYA")
+    # --- LOGO HANDLING (RESTORED) ---
+    logo_filename = "1.bara tama wijaya.jpg"
+    if os.path.exists(logo_filename):
+        st.image(logo_filename, use_container_width=True)
+    else:
+        st.markdown("## 🏢 BARA TAMA WIJAYA")
+        st.caption("⚠️ Upload file logo ke folder repository agar gambar muncul.")
+
     st.markdown("<h3 style='text-align: center;'>Water Management</h3>", unsafe_allow_html=True)
     st.divider()
     
@@ -187,7 +193,7 @@ if selected_pit != "All Sumps":
 df_s_filt = df_s[(df_s['Tanggal'].dt.year == sel_year) & (df_s['Tanggal'].dt.month == sel_month_int)].sort_values(by="Tanggal")
 df_p_filt = df_p[(df_p['Tanggal'].dt.year == sel_year) & (df_p['Tanggal'].dt.month == sel_month_int)].sort_values(by="Tanggal")
 
-# 1. Prepare Data for Pump Graph (Bisa per unit atau rata-rata)
+# 1. Prepare Data for Pump Graph
 if selected_unit != "All Units":
     df_p_display = df_p_filt[df_p_filt['Unit Code'] == selected_unit].sort_values(by="Tanggal")
     title_suffix = f"Unit: {selected_unit}"
@@ -195,12 +201,9 @@ else:
     df_p_display = df_p_filt.groupby('Tanggal')[['Debit Plan (m3/h)', 'Debit Actual (m3/h)', 'EWH Plan', 'EWH Actual']].mean().reset_index()
     title_suffix = "Rata-rata Semua Unit"
 
-# 2. WATER BALANCE CALCULATION (CRUCIAL: SELALU HITUNG SEMUA UNIT)
-# Logika: Ambil semua data pompa di Pit terpilih, hitung volume masing-masing, lalu SUM (Total) per tanggal.
-df_p_total = df_p_filt.copy() # df_p_filt berisi semua unit di Pit tersebut (belum difilter unit selection)
+# 2. WATER BALANCE CALCULATION (Termasuk Groundwater)
+df_p_total = df_p_filt.copy()
 df_p_total['Volume Out'] = df_p_total['Debit Actual (m3/h)'] * df_p_total['EWH Actual']
-
-# GROUP BY Tanggal dan SUM volumenya -> Ini menjamin Total Out adalah gabungan semua pompa
 daily_out = df_p_total.groupby(['Site', 'Pit', 'Tanggal'])['Volume Out'].sum().reset_index()
 
 df_wb = pd.merge(df_s_filt, daily_out, on=['Site', 'Pit', 'Tanggal'], how='left')
@@ -321,10 +324,9 @@ with tab_dash:
             
         # TABEL VALIDASI
         with st.expander("📋 Lihat Detail Angka Water Balance"):
-            st.caption("Volume Out = Penjumlahan Total Volume semua Pompa yang beroperasi di Sump ini.")
-            df_show = df_wb_dash[['Tanggal', 'Volume Air Survey (m3)', 'Volume Teoritis', 'Volume Out', 'Diff Volume', 'Error %']].copy()
+            df_show = df_wb_dash[['Tanggal', 'Volume Air Survey (m3)', 'Volume Teoritis', 'Diff Volume', 'Error %']].copy()
             df_show['Tanggal'] = df_show['Tanggal'].dt.strftime('%d-%m-%Y')
-            st.dataframe(df_show.style.format({'Volume Air Survey (m3)': '{:,.0f}','Volume Teoritis': '{:,.0f}', 'Volume Out': '{:,.0f}', 'Diff Volume': '{:,.0f}','Error %': '{:.1f}%'}), hide_index=True, use_container_width=True)
+            st.dataframe(df_show.style.format({'Volume Air Survey (m3)': '{:,.0f}','Volume Teoritis': '{:,.0f}', 'Diff Volume': '{:,.0f}','Error %': '{:.1f}%'}), hide_index=True, use_container_width=True)
 
         # --- 2. GRAFIK ELEVASI ---
         st.markdown("---")
