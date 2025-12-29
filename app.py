@@ -35,7 +35,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. FILE MANAGEMENT SYSTEM (AUTO-SAVE) ---
+# --- 2. FILE MANAGEMENT SYSTEM ---
 FILE_SUMP = "db_sump.csv"
 FILE_POMPA = "db_pompa.csv"
 
@@ -45,7 +45,7 @@ def load_or_init_data():
         df_s = pd.read_csv(FILE_SUMP)
         df_s['Tanggal'] = pd.to_datetime(df_s['Tanggal'])
     else:
-        # Generate Dummy Data Awal
+        # Generate Dummy Data
         data = []
         today = date.today()
         init_map = {
@@ -75,7 +75,7 @@ def load_or_init_data():
         df_p = pd.read_csv(FILE_POMPA)
         df_p['Tanggal'] = pd.to_datetime(df_p['Tanggal'])
     else:
-        # Generate Dummy Data Awal
+        # Generate Dummy Data
         data_p = []
         today = date.today()
         init_map = {
@@ -83,7 +83,7 @@ def load_or_init_data():
             "Wiraduta Sejahtera Langgeng (WSL)": ["Sump F01", "Sump F02"],
             "Nusantara Energy (NE)": ["Sump S8"]
         }
-        units = ["WP-01", "WP-02", "WP-03"] # Tambah unit dummy
+        units = ["WP-01", "WP-02", "WP-03"] 
         for i in range(60):
             d = today - timedelta(days=i)
             for site in init_map.keys():
@@ -111,7 +111,6 @@ if 'logged_in' not in st.session_state:
 if 'username' not in st.session_state:
     st.session_state['username'] = ''
 
-# Site Map Dynamic
 if 'site_map' not in st.session_state:
     existing_sites = st.session_state.data_sump['Site'].unique()
     current_map = {}
@@ -124,13 +123,11 @@ USERS = {"englcm": "eng123", "engwsl": "eng123", "engne": "eng123", "admin": "en
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
-    # --- LOGO HANDLING ---
     logo_filename = "1.bara tama wijaya.jpg"
     if os.path.exists(logo_filename):
         st.image(logo_filename, use_container_width=True)
     else:
         st.markdown("## 🏢 BARA TAMA WIJAYA")
-        st.caption("⚠️ Upload file logo ke folder repository agar gambar muncul.")
     
     st.markdown("<h3 style='text-align: center;'>Water Management</h3>", unsafe_allow_html=True)
     st.divider()
@@ -153,10 +150,9 @@ with st.sidebar:
         pit_options += st.session_state['site_map'][selected_site]
     selected_pit = st.selectbox("💧 Pilih Sump", pit_options)
 
-    # --- NEW: UNIT SELECTION ---
+    # UNIT SELECTION
     unit_options = ["All Units"]
     if selected_pit != "All Sumps":
-        # Ambil unit yang tersedia di Pit tersebut
         raw_p = st.session_state.data_pompa
         avail_units_list = raw_p[(raw_p['Site'] == selected_site) & (raw_p['Pit'] == selected_pit)]['Unit Code'].unique().tolist()
         avail_units_list.sort()
@@ -172,7 +168,7 @@ with st.sidebar:
     sel_month_name = st.selectbox("🗓️ Bulan", list(month_map.values()), index=curr_m-1)
     sel_month_int = [k for k,v in month_map.items() if v==sel_month_name][0]
 
-# --- 5. MAIN LOGIC ---
+# --- 5. MAIN LOGIC (WATER BALANCE CALC) ---
 def save_to_csv():
     st.session_state.data_sump.to_csv(FILE_SUMP, index=False)
     st.session_state.data_pompa.to_csv(FILE_POMPA, index=False)
@@ -192,25 +188,23 @@ if selected_pit != "All Sumps":
 df_s_filt = df_s[(df_s['Tanggal'].dt.year == sel_year) & (df_s['Tanggal'].dt.month == sel_month_int)].sort_values(by="Tanggal")
 df_p_filt = df_p[(df_p['Tanggal'].dt.year == sel_year) & (df_p['Tanggal'].dt.month == sel_month_int)].sort_values(by="Tanggal")
 
-# --- DATA PREPARATION FOR GRAPHS (UNIT FILTERING) ---
-# Untuk Grafik Pompa, kita filter berdasarkan Unit yang dipilih
+# 1. Prepare Data for Pump Graph (Specific Unit)
 if selected_unit != "All Units":
     df_p_display = df_p_filt[df_p_filt['Unit Code'] == selected_unit].sort_values(by="Tanggal")
-    # Tidak perlu mean() karena sudah spesifik per unit per hari
     title_suffix = f"Unit: {selected_unit}"
 else:
-    # Jika All Units, kita ambil rata-rata harian dari semua unit
     df_p_display = df_p_filt.groupby('Tanggal')[['Debit Plan (m3/h)', 'Debit Actual (m3/h)', 'EWH Plan', 'EWH Actual']].mean().reset_index()
     title_suffix = "Rata-rata Semua Unit"
 
-# --- WATER BALANCE CALCULATION (ALWAYS ALL UNITS) ---
-# Water balance harus menghitung TOTAL volume keluar dari SEMUA pompa, tidak boleh difilter per unit
+# 2. Water Balance Calculation (TOTAL IN vs TOTAL OUT)
+# Ini harus pakai SEMUA unit pompa, karena level air dipengaruhi total keluaran
 df_p_total = df_p_filt.copy()
 df_p_total['Volume Out'] = df_p_total['Debit Actual (m3/h)'] * df_p_total['EWH Actual']
 daily_out = df_p_total.groupby(['Site', 'Pit', 'Tanggal'])['Volume Out'].sum().reset_index()
 
 df_wb = pd.merge(df_s_filt, daily_out, on=['Site', 'Pit', 'Tanggal'], how='left')
 df_wb['Volume Out'] = df_wb['Volume Out'].fillna(0)
+# Rumus Estimasi: Hujan (mm) * Catchment (Ha) * 10 = m3
 df_wb['Volume In (Rain)'] = df_wb['Curah Hujan (mm)'] * df_wb['Actual Catchment (Ha)'] * 10
 df_wb = df_wb.sort_values(by="Tanggal")
 df_wb['Volume Kemarin'] = df_wb['Volume Air Survey (m3)'].shift(1)
@@ -233,162 +227,142 @@ def render_login_form(unique_key):
             else:
                 st.error("Gagal Login")
 
-# --- 6. TABS LAYOUT ---
+# --- 6. DISPLAY TABS ---
 st.markdown(f"## 🏢 Bara Tama Wijaya: {selected_site}")
 tab_dash, tab_input, tab_db, tab_admin = st.tabs(["📊 Dashboard", "📝 Input (Admin)", "📂 Database", "⚙️ Setting"])
 
 # TAB 1: DASHBOARD
 with tab_dash:
     if df_wb_dash.empty:
-        st.warning("⚠️ Data belum tersedia.")
+        st.warning("⚠️ Data belum tersedia untuk filter ini.")
     else:
         last = df_wb_dash.iloc[-1]
         
-        # METRICS
+        # 1. Metrics Top
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Elevasi", f"{last['Elevasi Air (m)']} m", f"Crit: {last['Critical Elevation (m)']}")
-        c2.metric("Vol Survey", f"{last['Volume Air Survey (m3)']:,.0f}")
-        c3.metric("Rain (Act)", f"{df_wb_dash['Curah Hujan (mm)'].sum()} mm")
+        c1.metric("Elevasi Air", f"{last['Elevasi Air (m)']} m", f"Crit: {last['Critical Elevation (m)']}")
+        c2.metric("Vol Survey", f"{last['Volume Air Survey (m3)']:,.0f} m³")
+        c3.metric("Rainfall (Bulan)", f"{df_wb_dash['Curah Hujan (mm)'].sum()} mm")
         clr = "#e74c3c" if last['Status'] == "BAHAYA" else "#27ae60"
         c4.markdown(f"<div style='background-color:{clr};color:white;padding:10px;border-radius:5px;text-align:center;'>{last['Status']}</div>", unsafe_allow_html=True)
         
         st.markdown("---")
         
-        # 1. GRAFIK ELEVASI & VOLUME
-        st.subheader("🌊 Tren Elevasi & Volume Sump")
+        # 2. Grafik Elevasi
+        st.subheader("🌊 1. Tren Elevasi & Volume (Sump)")
         fig_s = go.Figure()
         fig_s.add_trace(go.Bar(
-            x=df_wb_dash['Tanggal'], y=df_wb_dash['Volume Air Survey (m3)'], name='Vol', 
-            marker_color='#95a5a6', opacity=0.6, yaxis='y2',
-            text=df_wb_dash['Volume Air Survey (m3)'], texttemplate='%{text:.2s}', textposition='inside'
+            x=df_wb_dash['Tanggal'], y=df_wb_dash['Volume Air Survey (m3)'], name='Vol Survey', 
+            marker_color='#95a5a6', opacity=0.4, yaxis='y2'
         ))
         fig_s.add_trace(go.Scatter(
-            x=df_wb_dash['Tanggal'], y=df_wb_dash['Elevasi Air (m)'], name='Elevasi', mode='lines+markers+text',
-            line=dict(color='#e67e22', width=3),
-            text=df_wb_dash['Elevasi Air (m)'], texttemplate='%{text:.2f}', textposition='top center'
+            x=df_wb_dash['Tanggal'], y=df_wb_dash['Elevasi Air (m)'], name='Elevasi', mode='lines+markers',
+            line=dict(color='#e67e22', width=3)
         ))
         fig_s.add_trace(go.Scatter(x=df_wb_dash['Tanggal'], y=df_wb_dash['Critical Elevation (m)'], name='Limit', line=dict(color='red', dash='dash')))
         fig_s.update_layout(
             yaxis2=dict(overlaying='y', side='right', showgrid=False, title="Volume (m3)"),
-            yaxis=dict(title="Elevasi (m)"), legend=dict(orientation='h', y=1.1), height=450, margin=dict(t=30)
+            yaxis=dict(title="Elevasi (m)"), legend=dict(orientation='h', y=1.1), height=400, margin=dict(t=30)
         )
         st.plotly_chart(fig_s, use_container_width=True)
 
-        # 2. GRAFIK CURAH HUJAN
-        st.subheader("🌧️ Curah Hujan: Plan vs Actual")
-        fig_r = go.Figure()
-        fig_r.add_trace(go.Bar(
-            x=df_wb_dash['Tanggal'], y=df_wb_dash['Curah Hujan (mm)'], name='Actual', marker_color='#3498db',
-            text=df_wb_dash['Curah Hujan (mm)'], textposition='auto'
-        ))
-        fig_r.add_trace(go.Scatter(
-            x=df_wb_dash['Tanggal'], y=df_wb_dash['Plan Curah Hujan (mm)'], name='Plan', mode='lines+markers',
-            line=dict(color='#e74c3c', width=2, dash='dot')
-        ))
-        fig_r.update_layout(yaxis=dict(title="Curah Hujan (mm)"), legend=dict(orientation='h', y=1.1), height=350, margin=dict(t=20))
-        st.plotly_chart(fig_r, use_container_width=True)
-
-        # 3. GRAFIK POMPA (DYNAMIC UNIT)
+        # 3. Grafik WATER BALANCE (Baru)
         st.markdown("---")
-        st.subheader(f"⚙️ Performa Pompa ({title_suffix})")
+        st.subheader("⚖️ 2. Water Balance: Masuk (Hujan) vs Keluar (Pompa)")
         
-        col_p1, col_p2 = st.columns(2)
+        col_wb1, col_wb2 = st.columns([2, 1])
         
-        with col_p1:
-            st.caption(f"**Debit: Plan vs Actual (m3/h) - {selected_unit}**")
-            fig_d = go.Figure()
-            fig_d.add_trace(go.Bar(
-                x=df_p_display['Tanggal'], y=df_p_display['Debit Actual (m3/h)'], name='Act Debit', marker_color='#2ecc71',
-                text=df_p_display['Debit Actual (m3/h)'], texttemplate='%{text:.0f}', textposition='auto'
+        with col_wb1:
+            fig_wb = go.Figure()
+            # Masuk (Positif)
+            fig_wb.add_trace(go.Bar(
+                x=df_wb_dash['Tanggal'], y=df_wb_dash['Volume In (Rain)'], 
+                name='Vol Masuk (Hujan)', marker_color='#3498db'
             ))
-            fig_d.add_trace(go.Scatter(
-                x=df_p_display['Tanggal'], y=df_p_display['Debit Plan (m3/h)'], name='Plan Debit', mode='lines',
-                line=dict(color='#2c3e50', width=2, dash='dash')
+            # Keluar (Positif untuk perbandingan, atau Negatif jika ingin visual zero axis)
+            fig_wb.add_trace(go.Bar(
+                x=df_wb_dash['Tanggal'], y=df_wb_dash['Volume Out'], 
+                name='Vol Keluar (Pompa)', marker_color='#e74c3c'
             ))
-            fig_d.update_layout(legend=dict(orientation='h', y=1.1), height=300, margin=dict(t=20))
-            st.plotly_chart(fig_d, use_container_width=True)
+            fig_wb.update_layout(
+                barmode='group', 
+                yaxis=dict(title="Volume Air (m³)"), 
+                legend=dict(orientation='h', y=1.1),
+                height=400, margin=dict(t=20)
+            )
+            st.plotly_chart(fig_wb, use_container_width=True)
             
+        with col_wb2:
+            st.caption("📋 **Tabel Detail Neraca Air**")
+            # Menampilkan tabel ringkas
+            df_show = df_wb_dash[['Tanggal', 'Volume In (Rain)', 'Volume Out', 'Diff Volume', 'Error %']].copy()
+            df_show['Tanggal'] = df_show['Tanggal'].dt.strftime('%d-%m')
+            st.dataframe(df_show, hide_index=True, use_container_width=True, height=350)
+
+        # 4. Grafik Performa Pompa
+        st.markdown("---")
+        st.subheader(f"⚙️ 3. Performa Pompa ({title_suffix})")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.caption(f"**Debit: Plan vs Actual (m3/h)**")
+            fig_d = go.Figure()
+            fig_d.add_trace(go.Bar(x=df_p_display['Tanggal'], y=df_p_display['Debit Actual (m3/h)'], name='Act', marker_color='#2ecc71'))
+            fig_d.add_trace(go.Scatter(x=df_p_display['Tanggal'], y=df_p_display['Debit Plan (m3/h)'], name='Plan', line=dict(color='#2c3e50', dash='dash')))
+            fig_d.update_layout(legend=dict(orientation='h', y=1.1), height=250, margin=dict(t=20))
+            st.plotly_chart(fig_d, use_container_width=True)
         with col_p2:
-            st.caption(f"**EWH: Plan vs Actual (Jam) - {selected_unit}**")
+            st.caption(f"**EWH: Plan vs Actual (Jam)**")
             fig_e = go.Figure()
-            fig_e.add_trace(go.Bar(
-                x=df_p_display['Tanggal'], y=df_p_display['EWH Actual'], name='Act EWH', marker_color='#d35400',
-                text=df_p_display['EWH Actual'], texttemplate='%{text:.1f}', textposition='auto'
-            ))
-            fig_e.add_trace(go.Scatter(
-                x=df_p_display['Tanggal'], y=df_p_display['EWH Plan'], name='Plan EWH', mode='lines',
-                line=dict(color='#2c3e50', width=2, dash='dash')
-            ))
-            fig_e.update_layout(legend=dict(orientation='h', y=1.1), height=300, margin=dict(t=20))
+            fig_e.add_trace(go.Bar(x=df_p_display['Tanggal'], y=df_p_display['EWH Actual'], name='Act', marker_color='#d35400'))
+            fig_e.add_trace(go.Scatter(x=df_p_display['Tanggal'], y=df_p_display['EWH Plan'], name='Plan', line=dict(color='#2c3e50', dash='dash')))
+            fig_e.update_layout(legend=dict(orientation='h', y=1.1), height=250, margin=dict(t=20))
             st.plotly_chart(fig_e, use_container_width=True)
 
-        # 4. ANALISA & REKOMENDASI
+        # 5. Analisa & Rekomendasi
         st.markdown("---")
-        st.subheader("🧠 Analisa & Rekomendasi Cerdas")
+        st.subheader("🧠 4. Analisa & Rekomendasi")
         
-        last_date = last['Tanggal']
-        last_elev = last['Elevasi Air (m)']
-        crit_elev = last['Critical Elevation (m)']
-        last_rain = last['Curah Hujan (mm)']
-        
-        # Analisa Pompa (Specific Unit / Average)
-        last_pump_data = df_p_display[df_p_display['Tanggal'] == last_date]
+        last_pump_data = df_p_display[df_p_display['Tanggal'] == last['Tanggal']]
         if not last_pump_data.empty:
             avg_debit_act = last_pump_data['Debit Actual (m3/h)'].mean()
             avg_debit_plan = last_pump_data['Debit Plan (m3/h)'].mean()
-            avg_ewh_act = last_pump_data['EWH Actual'].mean()
-            avg_ewh_plan = last_pump_data['EWH Plan'].mean()
         else:
-            avg_debit_act = 0; avg_debit_plan = 500; avg_ewh_act = 0; avg_ewh_plan = 20
+            avg_debit_act = 0; avg_debit_plan = 500
 
         col_an, col_rec = st.columns(2)
-        
         with col_an:
-            if last_elev >= crit_elev:
-                style_box = "danger-box"; header_text = "🚨 KONDISI KRITIS (BAHAYA)"
-            elif last_elev >= (crit_elev - 1.0):
-                style_box = "rec-box"; header_text = "⚠️ KONDISI WARNING (SIAGA)"
+            if last['Elevasi Air (m)'] >= last['Critical Elevation (m)']:
+                style_box = "danger-box"; header_text = "🚨 BAHAYA"; status_text = "Elevasi Melebihi Limit!"
+            elif last['Elevasi Air (m)'] >= (last['Critical Elevation (m)'] - 1.0):
+                style_box = "rec-box"; header_text = "⚠️ SIAGA"; status_text = "Elevasi Mendekati Limit."
             else:
-                style_box = "analysis-box"; header_text = "✅ KONDISI AMAN"
+                style_box = "analysis-box"; header_text = "✅ AMAN"; status_text = "Level air terkendali."
             
-            content_html = f"""
+            st.markdown(f"""
             <div class="{style_box}">
                 <h4>{header_text}</h4>
+                <p><b>Status:</b> {status_text}</p>
                 <ul>
-                    <li><b>Status Level Air:</b> Saat ini elevasi {last_elev} m (Limit: {crit_elev} m).</li>
-            """
-            if last_rain > 50:
-                content_html += f"<li><b>Curah Hujan Tinggi:</b> Terjadi hujan deras ({last_rain} mm).</li>"
-            
-            debit_eff = (avg_debit_act / avg_debit_plan) * 100 if avg_debit_plan > 0 else 0
-            unit_text = "Unit ini" if selected_unit != "All Units" else "Rata-rata Unit"
-            if debit_eff < 80:
-                content_html += f"<li><b>Performa {unit_text} Rendah:</b> Efisiensi Debit hanya {debit_eff:.1f}%.</li>"
-            else:
-                content_html += f"<li><b>Performa {unit_text} Baik:</b> Efisiensi Debit {debit_eff:.1f}%.</li>"
-            content_html += "</ul></div>"
-            st.markdown(content_html, unsafe_allow_html=True)
+                    <li><b>Neraca Air Hari Ini:</b><br> 
+                        Masuk: {last['Volume In (Rain)']:,.0f} m³ vs Keluar: {last['Volume Out']:,.0f} m³</li>
+                    <li><b>Selisih Balance:</b> {last['Diff Volume']:,.0f} m³ ({last['Error %']:.1f}%)</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
 
         with col_rec:
-            st.markdown('<div class="rec-box"><h4>🛠️ REKOMENDASI ENGINEERING</h4>', unsafe_allow_html=True)
+            st.markdown('<div class="rec-box"><h4>🛠️ REKOMENDASI</h4>', unsafe_allow_html=True)
             rec_list = []
-            if last_elev >= crit_elev:
-                rec_list.append("⛔ <b>STOP OPERASI</b> di area pit terdampak. Lakukan evakuasi unit.")
-                rec_list.append("🚀 <b>Maksimalkan Pompa:</b> Nyalakan semua unit pompa yang standby.")
-            elif last_elev >= (crit_elev - 1.0):
-                rec_list.append("👀 <b>Monitor Ketat:</b> Cek elevasi setiap 1 jam.")
-            
+            if last['Elevasi Air (m)'] >= last['Critical Elevation (m)']:
+                rec_list.append("⛔ <b>STOP OPERASI & EVAKUASI UNIT.</b>")
+                rec_list.append("🚀 Nyalakan semua pompa cadangan.")
             if avg_debit_act < (avg_debit_plan * 0.85):
-                rec_list.append(f"🔧 <b>Cek {selected_unit}:</b> Debit rendah. Periksa RPM, impeller, atau kebocoran.")
+                rec_list.append(f"🔧 Cek Unit <b>{selected_unit}</b>: Debit di bawah target.")
+            if last['Volume Out'] < last['Volume In (Rain)']:
+                rec_list.append("📉 <b>Volume Masuk > Keluar:</b> Tingkatkan jam jalan pompa besok.")
             
-            if avg_ewh_act < (avg_ewh_plan - 2) and last_elev > (crit_elev - 2):
-                rec_list.append("⏳ <b>Tingkatkan Jam Jalan:</b> Kurangi waktu standby/delay.")
-
-            if not rec_list:
-                rec_list.append("✅ <b>Pertahankan Operasi:</b> Kondisi aman.")
-            
-            for rec in rec_list:
-                st.markdown(f"- {rec}", unsafe_allow_html=True)
+            if not rec_list: st.markdown("- ✅ Lanjutkan operasi normal.")
+            for r in rec_list: st.markdown(f"- {r}", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
 # TAB 2: INPUT
@@ -396,21 +370,20 @@ with tab_input:
     if not st.session_state['logged_in']:
         render_login_form(unique_key="input_tab")
     else:
-        st.info("💾 Setiap data yang disimpan akan otomatis ditulis ke file CSV (Permanen).")
+        st.info("Data Sump (Elevasi/Hujan) & Data Pompa (Unit/Debit).")
         with st.expander("➕ Input Harian Baru", expanded=True):
-            with st.container():
-                d_in = st.date_input("Tanggal", date.today())
-                p_in = st.selectbox("Sump", st.session_state['site_map'].get(selected_site, []), key="pi")
-                
+            d_in = st.date_input("Tanggal", date.today())
+            p_in = st.selectbox("Sump", st.session_state['site_map'].get(selected_site, []), key="pi")
+            
             cl, cr = st.columns(2)
             with cl:
                 with st.form("fs"):
-                    st.markdown("**Sump Data**")
+                    st.markdown("<b>Data Sump & Hujan</b>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
-                    e_a = c1.number_input("Elevasi", format="%.2f")
-                    v_a = c2.number_input("Volume", step=100)
-                    r_p = c1.number_input("Rain Plan", 0.0)
-                    r_a = c2.number_input("Rain Act", 0.0)
+                    e_a = c1.number_input("Elevasi (m)", format="%.2f")
+                    v_a = c2.number_input("Volume Survey (m3)", step=100)
+                    r_p = c1.number_input("Rain Plan (mm)", 0.0)
+                    r_a = c2.number_input("Rain Act (mm)", 0.0)
                     if st.form_submit_button("Simpan Sump"):
                         new = {
                             "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
@@ -420,14 +393,13 @@ with tab_input:
                             "Status": "BAHAYA" if e_a > 13 else "AMAN"
                         }
                         st.session_state.data_sump = pd.concat([pd.DataFrame([new]), st.session_state.data_sump], ignore_index=True)
-                        save_to_csv()
-                        st.success("Tersimpan!")
+                        save_to_csv(); st.success("Sump Saved!")
             with cr:
                 with st.form("fp"):
-                    st.markdown("**Pompa Data**")
-                    uc = st.text_input("Unit Code (e.g. WP-01)")
-                    da = st.number_input("Debit Act", 0)
-                    ea = st.number_input("EWH Act", 0.0)
+                    st.markdown("<b>Data Pompa</b>", unsafe_allow_html=True)
+                    uc = st.text_input("Unit Code (e.g., WP-01)")
+                    da = st.number_input("Debit Actual (m3/h)", 0)
+                    ea = st.number_input("EWH Actual (Jam)", 0.0)
                     if st.form_submit_button("Simpan Pompa"):
                         newp = {
                             "Tanggal": pd.to_datetime(d_in), "Site": selected_site, "Pit": p_in,
@@ -435,45 +407,30 @@ with tab_input:
                             "EWH Plan": 20.0, "EWH Actual": ea
                         }
                         st.session_state.data_pompa = pd.concat([pd.DataFrame([newp]), st.session_state.data_pompa], ignore_index=True)
-                        save_to_csv()
-                        st.success("Tersimpan!")
+                        save_to_csv(); st.success("Pompa Saved!")
 
         st.divider()
-        t_es, t_ep = st.tabs(["Edit Sump", "Edit Pompa"])
-        with t_es:
-            edt_s = st.data_editor(st.session_state.data_sump[st.session_state.data_sump['Site']==selected_site], num_rows="dynamic", key="ed_s")
-            if st.button("Simpan Perubahan Sump"):
-                base = st.session_state.data_sump[st.session_state.data_sump['Site']!=selected_site]
-                st.session_state.data_sump = pd.concat([base, edt_s], ignore_index=True)
-                save_to_csv()
-                st.success("Updated & Saved!"); st.rerun()
-        with t_ep:
-            edt_p = st.data_editor(st.session_state.data_pompa[st.session_state.data_pompa['Site']==selected_site], num_rows="dynamic", key="ed_p")
-            if st.button("Simpan Perubahan Pompa"):
-                base = st.session_state.data_pompa[st.session_state.data_pompa['Site']!=selected_site]
-                st.session_state.data_pompa = pd.concat([base, edt_p], ignore_index=True)
-                save_to_csv()
-                st.success("Updated & Saved!"); st.rerun()
+        t1, t2 = st.tabs(["Edit Sump", "Edit Pompa"])
+        with t1:
+            ed_s = st.data_editor(st.session_state.data_sump[st.session_state.data_sump['Site']==selected_site], num_rows="dynamic", key="es")
+            if st.button("Save Sump Changes"):
+                st.session_state.data_sump = pd.concat([st.session_state.data_sump[st.session_state.data_sump['Site']!=selected_site], ed_s], ignore_index=True)
+                save_to_csv(); st.rerun()
+        with t2:
+            ed_p = st.data_editor(st.session_state.data_pompa[st.session_state.data_pompa['Site']==selected_site], num_rows="dynamic", key="ep")
+            if st.button("Save Pump Changes"):
+                st.session_state.data_pompa = pd.concat([st.session_state.data_pompa[st.session_state.data_pompa['Site']!=selected_site], ed_p], ignore_index=True)
+                save_to_csv(); st.rerun()
 
-# TAB 3: DOWNLOAD
+# TAB 3 & 4 (Database & Admin)
 with tab_db:
-    st.subheader("📂 Download & Backup")
     c1, c2 = st.columns(2)
-    with c1:
-        st.download_button("⬇️ Download CSV Sump", st.session_state.data_sump.to_csv(index=False).encode('utf-8'), "db_sump.csv", "text/csv")
-        st.dataframe(st.session_state.data_sump.head())
-    with c2:
-        st.download_button("⬇️ Download CSV Pompa", st.session_state.data_pompa.to_csv(index=False).encode('utf-8'), "db_pompa.csv", "text/csv")
-        st.dataframe(st.session_state.data_pompa.head())
+    c1.download_button("Download Sump CSV", st.session_state.data_sump.to_csv(index=False), "sump.csv")
+    c2.download_button("Download Pompa CSV", st.session_state.data_pompa.to_csv(index=False), "pompa.csv")
+    st.dataframe(st.session_state.data_sump)
 
-# TAB 4: SETTING
 with tab_admin:
-    if not st.session_state['logged_in']:
-        render_login_form(unique_key="admin_tab")
-    else:
-        st.write("⚙️ Pengaturan Site")
-        ns = st.text_input("Tambah Site Baru")
-        if st.button("Add Site"):
-            if ns and ns not in st.session_state['site_map']:
-                st.session_state['site_map'][ns] = []
-                st.success(f"Site {ns} added")
+    if st.session_state['logged_in']:
+        ns = st.text_input("New Site Name")
+        if st.button("Add Site") and ns: st.session_state['site_map'][ns] = []
+    else: render_login_form("adm")
