@@ -28,29 +28,55 @@ def load_data():
     init_db()
     conn = get_connection()
     
-    # Load Sump
+    # --- LOAD SUMP ---
     df_s = conn.query("SELECT * FROM sump", ttl=0)
+    
+    # FIX: Renaming columns UNCONDITIONALLY (Removed the 'if not empty' check)
+    # Ensure columns are lowercase first (Postgres standard)
+    df_s.columns = map(str.lower, df_s.columns)
+    
+    # Handle Date Column
     if not df_s.empty:
-        # Normalize column names from Postgres (lowercase) to App format
-        df_s.columns = map(str.lower, df_s.columns)
         df_s['tanggal'] = pd.to_datetime(df_s['tanggal'])
-        df_s = df_s.rename(columns={
-            "elevasi_air": "Elevasi Air (m)", "critical_elevation": "Critical Elevation (m)",
-            "volume_air_survey": "Volume Air Survey (m3)", "plan_curah_hujan": "Plan Curah Hujan (mm)",
-            "curah_hujan": "Curah Hujan (mm)", "actual_catchment": "Actual Catchment (Ha)",
-            "groundwater": "Groundwater (m3)", "tanggal": "Tanggal", "site": "Site", "pit": "Pit", "status": "Status"
-        })
+    
+    # Apply Standard Naming
+    df_s = df_s.rename(columns={
+        "elevasi_air": "Elevasi Air (m)", "critical_elevation": "Critical Elevation (m)",
+        "volume_air_survey": "Volume Air Survey (m3)", "plan_curah_hujan": "Plan Curah Hujan (mm)",
+        "curah_hujan": "Curah Hujan (mm)", "actual_catchment": "Actual Catchment (Ha)",
+        "groundwater": "Groundwater (m3)", "tanggal": "Tanggal", "site": "Site", "pit": "Pit", "status": "Status"
+    })
 
-    # Load Pompa
+    # If DataFrame is truly empty (0 columns), enforce structure manually
+    # This happens if the table creation query behaved unexpectedly
+    if df_s.empty and 'Site' not in df_s.columns:
+         df_s = pd.DataFrame(columns=[
+            "Tanggal", "Site", "Pit", "Elevasi Air (m)", "Critical Elevation (m)",
+            "Volume Air Survey (m3)", "Plan Curah Hujan (mm)", "Curah Hujan (mm)",
+            "Actual Catchment (Ha)", "Groundwater (m3)", "Status"
+        ])
+
+    # --- LOAD POMPA ---
     df_p = conn.query("SELECT * FROM pompa", ttl=0)
+    
+    # FIX: Renaming columns UNCONDITIONALLY
+    df_p.columns = map(str.lower, df_p.columns)
+    
     if not df_p.empty:
-        df_p.columns = map(str.lower, df_p.columns)
         df_p['tanggal'] = pd.to_datetime(df_p['tanggal'])
-        df_p = df_p.rename(columns={
-            "unit_code": "Unit Code", "debit_plan": "Debit Plan (m3/h)",
-            "debit_actual": "Debit Actual (m3/h)", "ewh_plan": "EWH Plan", "ewh_actual": "EWH Actual",
-            "tanggal": "Tanggal", "site": "Site", "pit": "Pit"
-        })
+
+    df_p = df_p.rename(columns={
+        "unit_code": "Unit Code", "debit_plan": "Debit Plan (m3/h)",
+        "debit_actual": "Debit Actual (m3/h)", "ewh_plan": "EWH Plan", "ewh_actual": "EWH Actual",
+        "tanggal": "Tanggal", "site": "Site", "pit": "Pit"
+    })
+
+    # Enforce structure for empty Pompa table
+    if df_p.empty and 'Site' not in df_p.columns:
+        df_p = pd.DataFrame(columns=[
+            "Tanggal", "Site", "Pit", "Unit Code", 
+            "Debit Plan (m3/h)", "Debit Actual (m3/h)", "EWH Plan", "EWH Actual"
+        ])
     
     return df_s, df_p
 
@@ -86,6 +112,7 @@ def overwrite_full_db(df_s, df_p):
     """Bulk replace tables (used in Edit tab)."""
     conn = get_connection()
     
+    # Prepare Dataframes
     s_save = df_s.rename(columns={
         "Elevasi Air (m)": "elevasi_air", "Critical Elevation (m)": "critical_elevation",
         "Volume Air Survey (m3)": "volume_air_survey", "Plan Curah Hujan (mm)": "plan_curah_hujan",
@@ -98,8 +125,10 @@ def overwrite_full_db(df_s, df_p):
         "Debit Actual (m3/h)": "debit_actual", "EWH Plan": "ewh_plan", "EWH Actual": "ewh_actual"
     })
 
-    # Use SQLAlchemy engine via st.connection
+    # Ensure columns are lowercase to match Postgres schema
+    s_save.columns = map(str.lower, s_save.columns)
+    p_save.columns = map(str.lower, p_save.columns)
+
     engine = conn.engine 
     s_save.to_sql('sump', engine, if_exists='replace', index=False)
     p_save.to_sql('pompa', engine, if_exists='replace', index=False)
-    
