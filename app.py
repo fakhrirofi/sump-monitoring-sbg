@@ -1,189 +1,89 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-import os
-from datetime import date
+import numpy as np
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Mining Sump Monitor", layout="wide")
+# --- 1. SETUP DATA DUMMY (MENGGANTIKAN DATABASE SEMENTARA) ---
+# Struktur data dictionary untuk 3 Site
+sites_data = {
+    "Lais Coal Mine": {
+        "pits": ["Pit Utara", "Pit Selatan"],
+        "pumps": ["WP1203 (Multiflo)", "WP1005 (KSB)"],
+        "critical_level": 12.0
+    },
+    "Wiraduta Sejahtera Langgeng": {
+        "pits": ["Pit A", "Pit B1"],
+        "pumps": ["WP2001 (Sykes)", "WP2002 (Sykes)"],
+        "critical_level": 45.0
+    },
+    "Nusantara Energy": {
+        "pits": ["Pit Garuda"],
+        "pumps": ["WP3001 (Multiflo)"],
+        "critical_level": 8.5
+    }
+}
 
-# --- FUNGSI DATABASE SEDERHANA (CSV) ---
-DB_FILE = 'sump_database.csv'
+# --- 2. LAYOUT DASHBOARD ---
+st.set_page_config(page_title="Mining Water Management", layout="wide")
 
-def init_db():
-    """Membuat file database jika belum ada"""
-    if not os.path.exists(DB_FILE):
-        df = pd.DataFrame(columns=[
-            'Date', 'Elevation', 'Rainfall', 'Volume', 
-            'Pump1_HM_Start', 'Pump1_HM_End', 'Pump1_Hours',
-            'Pump2_HM_Start', 'Pump2_HM_End', 'Pump2_Hours',
-            'Total_Outflow_Est'
-        ])
-        df.to_csv(DB_FILE, index=False)
+# Sidebar Navigasi
+st.sidebar.title("🌊 Water Management")
+selected_site = st.sidebar.selectbox("Pilih Site:", list(sites_data.keys()))
 
-def load_data():
-    """Load data dari CSV"""
-    if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        df['Date'] = pd.to_datetime(df['Date'])
-        return df
-    return pd.DataFrame()
+# Ambil data berdasarkan site yang dipilih
+current_site_info = sites_data[selected_site]
+selected_pit = st.sidebar.selectbox("Pilih Lokasi (Sump):", current_site_info["pits"])
 
-def save_data(new_entry):
-    """Menyimpan data baru ke CSV"""
-    df = load_data()
-    # Mengubah new_entry menjadi DataFrame
-    new_df = pd.DataFrame([new_entry])
-    # Menggabungkan dan menyimpan
-    if not df.empty:
-        df = pd.concat([df, new_df], ignore_index=True)
-    else:
-        df = new_df
-    df.to_csv(DB_FILE, index=False)
-    return df
+# --- 3. KONTEN UTAMA ---
+st.title(f"Dashboard: {selected_site}")
+st.markdown(f"**Monitoring Sump:** {selected_pit}")
 
-# Inisialisasi Database
-init_db()
+# Baris Metrik Atas (KPI)
+col1, col2, col3, col4 = st.columns(4)
 
-# --- SIDEBAR NAVIGASI ---
-st.sidebar.title("🔧 Navigasi")
-menu = st.sidebar.radio("Pilih Halaman:", ["📊 Dashboard", "📝 Input Daily Data"])
+# Simulasi angka acak agar terlihat hidup
+elevasi_aktual = np.random.uniform(5, 14) 
+is_danger = elevasi_aktual > current_site_info['critical_level']
+status_color = "🔴 BAHAYA" if is_danger else "🟢 AMAN"
 
-# ==============================================================================
-# HALAMAN 1: INPUT DATA (FORMULIR)
-# ==============================================================================
-if menu == "📝 Input Daily Data":
-    st.title("📝 Input Data Harian Sump")
-    st.markdown("---")
+with col1:
+    st.metric("Status Keselamatan", status_color)
+with col2:
+    st.metric("Curah Hujan (Hari Ini)", "45 mm", "+12mm")
+with col3:
+    st.metric("Elevasi Air", f"{elevasi_aktual:.2f} m", f"Batas: {current_site_info['critical_level']} m")
+with col4:
+    st.metric("Total Pompa Running", f"{len(current_site_info['pumps'])} Unit")
+
+st.divider()
+
+# --- 4. VISUALISASI GRAFIK ---
+c1, c2 = st.columns([2, 1])
+
+with c1:
+    st.subheader("Tren Elevasi Air vs Batas Kritis")
+    # Membuat data dummy chart
+    dates = pd.date_range(start="2025-12-01", periods=10)
+    chart_data = pd.DataFrame({
+        'Tanggal': dates,
+        'Elevasi Aktual': np.random.uniform(8, 13, 10),
+        'Critical Level': [current_site_info['critical_level']] * 10
+    })
+    st.line_chart(chart_data, x='Tanggal', y=['Elevasi Aktual', 'Critical Level'], color=["#0000FF", "#FF0000"])
+
+with c2:
+    st.subheader("Performa Pompa (Hari Ini)")
+    # Menampilkan grid status pompa
+    pump_df = pd.DataFrame({
+        "Unit Code": current_site_info['pumps'],
+        "Flowrate Plan (m3/h)": [500, 450] if len(current_site_info['pumps']) > 1 else [500],
+        "Actual (m3/h)": [480, 200] if len(current_site_info['pumps']) > 1 else [480],
+    })
+    # Hitung efisiensi
+    pump_df["Efisiensi"] = (pump_df["Actual (m3/h)"] / pump_df["Flowrate Plan (m3/h)"]) * 100
     
-    with st.form("daily_input_form"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("1. Kondisi Lingkungan")
-            input_date = st.date_input("Tanggal", date.today())
-            input_elevasi = st.number_input("Elevasi Aktual (m)", min_value=0.0, format="%.3f")
-            input_ch = st.number_input("Curah Hujan (mm)", min_value=0.0, format="%.1f")
-            # Volume bisa dibuat otomatis hitung berdasarkan elevasi jika ada tabel kurva, 
-            # untuk sekarang kita buat manual input
-            input_vol = st.number_input("Volume Air Survey (m³)", min_value=0.0)
+    st.dataframe(pump_df.style.highlight_between(left=0, right=50, subset="Efisiensi", color="#ffcccc"))
+    st.caption("*Merah: Efisiensi di bawah 50% (Perlu Cek Mekanik)")
 
-        with col2:
-            st.subheader("2. Operasional Pompa")
-            st.markdown("**Pompa 1 (WP1203 - MF420)**")
-            p1_start = st.number_input("HM Awal WP1203", min_value=0.0)
-            p1_end = st.number_input("HM Akhir WP1203", min_value=0.0)
-            
-            st.markdown("**Pompa 2 (WP1002)**")
-            p2_start = st.number_input("HM Awal WP1002", min_value=0.0)
-            p2_end = st.number_input("HM Akhir WP1002", min_value=0.0)
-
-        # Tombol Submit
-        submitted = st.form_submit_button("💾 Simpan Data")
-        
-        if submitted:
-            # --- VALIDASI DATA (Kunci dari Opsi 3) ---
-            error = False
-            
-            # Cek HM Logic
-            if p1_end < p1_start:
-                st.error("❌ Error: HM Akhir WP1203 lebih kecil dari HM Awal!")
-                error = True
-            if p2_end < p2_start:
-                st.error("❌ Error: HM Akhir WP1002 lebih kecil dari HM Awal!")
-                error = True
-                
-            if not error:
-                # Kalkulasi Otomatis (Backend Logic)
-                p1_hours = p1_end - p1_start
-                p2_hours = p2_end - p2_start
-                
-                # Estimasi Flowrate (Misal asumsi: WP1203=250 m3/jam, WP1002=250 m3/jam)
-                # Angka ini bisa disesuaikan dengan actual flowrate
-                est_outflow = (p1_hours * 250) + (p2_hours * 250)
-                
-                new_data = {
-                    'Date': input_date,
-                    'Elevation': input_elevasi,
-                    'Rainfall': input_ch,
-                    'Volume': input_vol,
-                    'Pump1_HM_Start': p1_start,
-                    'Pump1_HM_End': p1_end,
-                    'Pump1_Hours': p1_hours,
-                    'Pump2_HM_Start': p2_start,
-                    'Pump2_HM_End': p2_end,
-                    'Pump2_Hours': p2_hours,
-                    'Total_Outflow_Est': est_outflow
-                }
-                
-                save_data(new_data)
-                st.success(f"✅ Data tanggal {input_date} berhasil disimpan!")
-                st.balloons()
-
-# ==============================================================================
-# HALAMAN 2: DASHBOARD
-# ==============================================================================
-elif menu == "📊 Dashboard":
-    st.title("🌊 Dashboard Monitoring Sump")
-    
-    df = load_data()
-    
-    if df.empty:
-        st.warning("Belum ada data. Silakan input data di menu sebelah kiri.")
-    else:
-        # Sort data berdasarkan tanggal
-        df = df.sort_values(by='Date')
-        
-        # --- TOP KPI CARDS ---
-        latest = df.iloc[-1]
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Elevasi Terkini", f"{latest['Elevation']} m")
-        col2.metric("Curah Hujan Terakhir", f"{latest['Rainfall']} mm")
-        col3.metric("Volume Air", f"{latest['Volume']:,.0f} m³")
-        col4.metric("Total Outflow (Est)", f"{latest['Total_Outflow_Est']:,.0f} m³")
-        
-        st.markdown("---")
-
-        # --- CHART 1: COMBO CHART (HUJAN vs ELEVASI) ---
-        st.subheader("🌧️ Analisis Hujan & Elevasi Air")
-        
-        fig_combo = go.Figure()
-        # Bar Hujan
-        fig_combo.add_trace(go.Bar(
-            x=df['Date'], y=df['Rainfall'],
-            name='Curah Hujan (mm)', marker_color='#3498db', opacity=0.6, yaxis='y'
-        ))
-        # Line Elevasi
-        fig_combo.add_trace(go.Scatter(
-            x=df['Date'], y=df['Elevation'],
-            name='Elevasi (m)', mode='lines+markers',
-            line=dict(color='#e74c3c', width=3), yaxis='y2'
-        ))
-        
-        fig_combo.update_layout(
-            yaxis=dict(title='Curah Hujan (mm)', side='right', showgrid=False),
-            yaxis2=dict(title='Elevasi (m)', side='left', overlaying='y', showgrid=True),
-            hovermode="x unified",
-            legend=dict(orientation="h", y=1.1)
-        )
-        st.plotly_chart(fig_combo, use_container_width=True)
-        
-        # --- CHART 2: PERFORMA POMPA (JAM KERJA) ---
-        st.subheader("⚙️ Jam Operasi Pompa (Running Hours)")
-        
-        # Melt dataframe untuk format grafik bar chart grouped
-        df_pump = df[['Date', 'Pump1_Hours', 'Pump2_Hours']].melt(
-            id_vars='Date', var_name='Pompa', value_name='Jam Operasi'
-        )
-        
-        fig_pump = px.bar(
-            df_pump, x='Date', y='Jam Operasi', color='Pompa',
-            barmode='group',
-            color_discrete_map={'Pump1_Hours': '#2ecc71', 'Pump2_Hours': '#f1c40f'}
-        )
-        st.plotly_chart(fig_pump, use_container_width=True)
-
-        # --- DATA TABLE ---
-        with st.expander("Lihat Data Mentah"):
-            st.dataframe(df.sort_values(by='Date', ascending=False), use_container_width=True)
+# --- 5. LOGIC WARNING ---
+if elevasi_aktual > current_site_info['critical_level']:
+    st.error(f"⚠️ PERINGATAN: Air di {selected_pit} sudah melewati batas aman! Segera aktifkan pompa cadangan.")
