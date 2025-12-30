@@ -7,69 +7,75 @@ USERS = {"englcm": "eng123", "engwsl": "eng123", "engne": "eng123", "admin": "en
 def load_css():
     st.markdown("""
     <style>
-        /* 1. Force Main Background to Light & Text to Dark (Overrides Dark Mode Defaults) */
-        .stApp { 
-            background-color: #f4f6f9; 
-            color: #000000;
+        /* --- 1. FORCE MAIN BACKGROUND TO LIGHT --- */
+        .stApp {
+            background-color: #f4f6f9 !important;
         }
-        
-        /* 2. Fix Metrics: Force Black Text inside the White Box */
+
+        /* --- 2. FORCE ALL TEXT IN MAIN AREA TO BLACK --- */
+        /* This overrides Streamlit's Dark Mode default white text */
+        .main .block-container p, 
+        .main .block-container div, 
+        .main .block-container h1, 
+        .main .block-container h2, 
+        .main .block-container h3, 
+        .main .block-container h4, 
+        .main .block-container h5, 
+        .main .block-container h6,
+        .main .block-container span,
+        .main .block-container label,
+        .main .block-container li {
+            color: #000000 !important;
+        }
+
+        /* --- 3. FIX METRIC BOXES SPECIFICALLY --- */
         div[data-testid="metric-container"] {
-            background-color: #ffffff; 
+            background-color: #ffffff !important;
             border: 1px solid #e0e0e0;
-            padding: 15px; 
-            border-radius: 10px; 
+            padding: 15px;
+            border-radius: 10px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            color: #000000 !important; /* IMPORTANT: Fixes white text in dark mode */
         }
         
-        /* Ensure the label (small text above metric) is also dark */
-        div[data-testid="metric-container"] label {
-            color: #333333 !important;
+        /* Force Metric Label (Top text) to Black */
+        div[data-testid="metric-container"] label[data-testid="stMetricLabel"] {
+            color: #000000 !important;
+        }
+        div[data-testid="metric-container"] div[data-testid="stMetricLabel"] {
+             color: #000000 !important;
         }
         
-        /* 3. Fix Analysis/Rec Boxes: Force Dark Text on Light Backgrounds */
-        .analysis-box { 
-            background-color: #e8f6f3; 
-            padding: 15px; 
-            border-radius: 10px; 
-            border-left: 5px solid #1abc9c; 
-            color: #000000 !important; /* Force text black */
-        }
-        .rec-box { 
-            background-color: #fef9e7; 
-            padding: 15px; 
-            border-radius: 10px; 
-            border-left: 5px solid #f1c40f; 
-            color: #000000 !important; /* Force text black */
-        }
-        .danger-box { 
-            background-color: #fdedec; 
-            padding: 15px; 
-            border-radius: 10px; 
-            border-left: 5px solid #e74c3c; 
-            color: #000000 !important; /* Force text black */
+        /* Force Metric Value (Big number) to Black */
+        div[data-testid="metric-container"] div[data-testid="stMetricValue"] {
+            color: #000000 !important;
         }
         
-        /* 4. Other Styles */
-        .wb-alert { 
-            background-color: #ffcccc; 
-            color: #cc0000 !important; 
-            padding: 10px; 
-            border-radius: 5px; 
-            font-weight: bold; 
-            margin-bottom: 10px; 
-            border: 1px solid #ff0000; 
+        /* Force Metric Delta (Arrow) text - Optional, usually green/red is fine */
+        div[data-testid="stMetricDelta"] {
+            /* Keep default colors for delta */
         }
-        .date-header { 
-            font-size: 1.2rem; 
-            font-weight: bold; 
-            color: #2c3e50 !important; 
-            margin-bottom: 10px; 
+
+        /* --- 4. FIX CUSTOM BOXES --- */
+        .analysis-box, .rec-box, .danger-box {
+            color: #000000 !important;
         }
         
-        /* Fix Expander Text Color */
+        /* --- 5. FIX EXPANDERS --- */
         .streamlit-expanderHeader {
+            color: #000000 !important;
+            background-color: #ffffff !important;
+        }
+        
+        /* --- 6. SIDEBAR EXCEPTIONS --- */
+        /* Keep Sidebar Dark (White Text) so it looks good */
+        section[data-testid="stSidebar"] {
+            background-color: #262730 !important;
+        }
+        section[data-testid="stSidebar"] * {
+            color: #ffffff !important;
+        }
+        /* Fix Input fields in Sidebar to have dark text if background is white input */
+        section[data-testid="stSidebar"] input {
             color: #000000 !important;
         }
     </style>
@@ -89,11 +95,11 @@ def render_login_form(unique_key):
                 st.error("Gagal Login")
 
 def render_charts(df_wb_dash, df_p_display, title_suffix):
-    # Ensure charts use a template that looks good on light background
+    # FORCE PLOTLY TO USE BLACK TEXT & TRANSPARENT BACKGROUND
     layout_settings = dict(
-        paper_bgcolor='rgba(0,0,0,0)', # Transparent background
+        paper_bgcolor='rgba(0,0,0,0)', 
         plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color="black") # Force chart font to black
+        font=dict(color="black") # Forces chart text to be black
     )
 
     # --- 1. WATER BALANCE & RAINFALL ---
