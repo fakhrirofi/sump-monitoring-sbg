@@ -8,111 +8,73 @@ def load_css():
     st.markdown("""
     <style>
         /* =========================================
-           1. MAIN CONTENT AREA (FORCE LIGHT THEME)
+           MAIN CONTENT AREA FIXES
            ========================================= */
         
-        /* Force Main Background to Light Grey */
+        /* 1. Force Main Background to Light Grey */
         .stApp {
             background-color: #f4f6f9 !important;
         }
 
-        /* --- AGGRESSIVE TEXT COLOR OVERRIDE --- */
-        /* Target the main container and force all common text elements to BLACK */
-        .main .block-container {
-            color: #000000 !important;
-        }
-        
-        .main .block-container h1, 
-        .main .block-container h2, 
-        .main .block-container h3, 
-        .main .block-container h4, 
-        .main .block-container p, 
-        .main .block-container li,
-        .main .block-container span,
-        .main .block-container div[data-testid="stMarkdownContainer"] p {
+        /* 2. FIX HEADERS (e.g., "Bara Tama Wijaya", "Analisa & Rekomendasi", "Tren Elevasi") */
+        .main h1, .main h2, .main h3, .main h4, .main h5, .main h6 {
             color: #000000 !important;
         }
 
-        /* Fix specific Streamlit elements that might resist */
-        .main .block-container label[data-testid="stMetricLabel"] {
-            color: #000000 !important;
+        /* 3. FIX METRICS (e.g., "Elevasi Air", "10.0 m", "Vol Survey") */
+        /* The Label (Top small text) */
+        [data-testid="stMetricLabel"] {
+            color: #444444 !important; /* Dark Grey */
         }
-        .main .block-container div[data-testid="stMetricValue"] {
-            color: #000000 !important;
+        /* The Value (Big number) */
+        [data-testid="stMetricValue"] {
+            color: #000000 !important; /* Pure Black */
         }
-        .main .block-container div[data-testid="stMetricDelta"] {
-            /* Keep delta colors (green/red) but ensure visibility if needed */
+        /* The Caption/Delta (e.g., "Crit: 13.0") */
+        [data-testid="stMetricDelta"] > div {
+            color: #333333 !important; /* Dark Grey (overrides default light grey) */
         }
-
-        /* Metric Box Styling */
+        /* Ensure Metric Box Background is White */
         div[data-testid="metric-container"] {
             background-color: #ffffff !important;
             border: 1px solid #e0e0e0;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
 
-        /* Fix Expander Headers */
+        /* 4. FIX EXPANDERS (e.g., "📋 Lihat Detail Angka Water Balance") */
         .streamlit-expanderHeader {
-            color: #000000 !important;
             background-color: #ffffff !important;
-        }
-        .streamlit-expanderContent {
-            color: #000000 !important;
-            background-color: #ffffff !important;
-        }
-
-        /* Custom Box Classes */
-        .analysis-box, .rec-box, .danger-box {
             color: #000000 !important;
         }
-        .wb-alert {
-            color: #cc0000 !important;
-        }
-
-
-        /* =========================================
-           2. SIDEBAR AREA (FORCE DARK THEME)
-           ========================================= */
-        
-        /* Force Sidebar Background to Dark */
-        section[data-testid="stSidebar"] {
-            background-color: #262730 !important;
-        }
-
-        /* Force Sidebar GENERAL Text to WHITE */
-        section[data-testid="stSidebar"] h1, 
-        section[data-testid="stSidebar"] h2, 
-        section[data-testid="stSidebar"] h3, 
-        section[data-testid="stSidebar"] p, 
-        section[data-testid="stSidebar"] span, 
-        section[data-testid="stSidebar"] label,
-        section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] {
-            color: #ffffff !important;
-        }
-
-        /* --- FIX SIDEBAR INPUTS --- */
-        
-        /* 1. The Labels above inputs (must be White) */
-        section[data-testid="stSidebar"] .stSelectbox label,
-        section[data-testid="stSidebar"] .stTextInput label,
-        section[data-testid="stSidebar"] .stDateInput label,
-        section[data-testid="stSidebar"] .stNumberInput label {
-            color: #ffffff !important;
-        }
-
-        /* 2. The Text INSIDE the Input Box (must be Black, because the box is white) */
-        section[data-testid="stSidebar"] input {
+        .streamlit-expanderHeader p {
             color: #000000 !important;
         }
-        
-        /* 3. The Text INSIDE Dropdowns (Selected Value) */
-        section[data-testid="stSidebar"] div[data-baseweb="select"] span {
+
+        /* 5. FIX CUSTOM BOXES (e.g., "PERINGATAN", "REKOMENDASI") */
+        /* Forces the container text to black */
+        .analysis-box, .rec-box, .danger-box, .wb-alert {
             color: #000000 !important;
         }
-        
-        /* 4. Fix dropdown svg icons */
-        section[data-testid="stSidebar"] div[data-baseweb="select"] svg {
-            fill: #000000 !important;
+        /* Forces the Headers inside boxes (e.g., <h4>REKOMENDASI</h4>) to black */
+        .analysis-box h4, .rec-box h4, .danger-box h4, .wb-alert h4 {
+            color: #000000 !important;
+        }
+        /* Forces List items (e.g., "🔴 Cek Input...") to black */
+        .analysis-box li, .rec-box li, .danger-box li, .wb-alert li {
+            color: #000000 !important;
+        }
+        /* Forces Bold text (e.g., <b>Status Water Balance:</b>) to black */
+        .analysis-box b, .rec-box b, .danger-box b, .wb-alert b {
+            color: #000000 !important;
+        }
+        /* Forces standard paragraphs inside boxes to black */
+        .analysis-box p, .rec-box p, .danger-box p, .wb-alert p {
+            color: #000000 !important;
+        }
+
+        /* 6. FIX GENERAL MARKDOWN TEXT (Fallback for other text) */
+        .main p {
+            color: #000000 !important;
         }
 
     </style>
